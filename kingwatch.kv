@@ -1,0 +1,325 @@
+#:kivy 2.3.0
+#:import ArcGauge ui.gauges.ArcGauge
+
+# ── Reusable stat row ───────────────────────────────────────────────────────
+<StatRow@BoxLayout>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: dp(38)
+    spacing: dp(8)
+    padding: [dp(12), dp(4), dp(12), dp(4)]
+    canvas.before:
+        Color:
+            rgba: 1, 1, 1, 0.04
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+
+# ── Separator ───────────────────────────────────────────────────────────────
+<Divider@Widget>:
+    size_hint_y: None
+    height: dp(1)
+    canvas:
+        Color:
+            rgba: 1, 1, 1, 0.08
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+# ── Main Dashboard ──────────────────────────────────────────────────────────
+<Dashboard>:
+    id: root_layout
+    orientation: "vertical"
+    spacing: 0
+    canvas.before:
+        Color:
+            rgba: 0.05, 0.05, 0.08, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    # ── Title Bar ────────────────────────────────────────────────────────
+    BoxLayout:
+        id: title_bar
+        orientation: "horizontal"
+        size_hint_y: None
+        height: dp(52)
+        padding: [dp(14), dp(8), dp(10), dp(8)]
+        spacing: dp(8)
+        canvas.before:
+            Color:
+                rgba: 0.08, 0.08, 0.14, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        Label:
+            text: "⚡ KingWatch Pro"
+            font_size: sp(18)
+            bold: True
+            color: 0.30, 0.75, 1, 1
+            halign: "left"
+            text_size: self.size
+            valign: "center"
+
+        Label:
+            id: lbl_theme
+            text: "DARK"
+            font_size: sp(11)
+            color: 0.5, 0.5, 0.6, 1
+            size_hint_x: None
+            width: dp(56)
+            halign: "center"
+            text_size: self.size
+            valign: "center"
+
+        Button:
+            text: "◑"
+            font_size: sp(18)
+            size_hint: None, None
+            size: dp(36), dp(36)
+            background_color: 0.15, 0.15, 0.25, 1
+            on_release: root.cycle_theme()
+
+        Button:
+            id: btn_collapse
+            text: "_"
+            font_size: sp(16)
+            size_hint: None, None
+            size: dp(36), dp(36)
+            background_color: 0.15, 0.15, 0.25, 1
+            on_release: root.toggle_collapse()
+
+    # ── Collapsible Content ───────────────────────────────────────────────
+    ScrollView:
+        id: scroll_area
+        do_scroll_x: False
+        bar_width: dp(3)
+        bar_color: 0.30, 0.75, 1, 0.5
+
+        BoxLayout:
+            id: content_area
+            orientation: "vertical"
+            size_hint_y: None
+            height: self.minimum_height
+            spacing: dp(10)
+            padding: [dp(12), dp(10), dp(12), dp(14)]
+
+            # ── Gauge Row ─────────────────────────────────────────────────
+            BoxLayout:
+                orientation: "horizontal"
+                size_hint_y: None
+                height: dp(180)
+                spacing: dp(8)
+
+                # CPU gauge
+                BoxLayout:
+                    orientation: "vertical"
+                    spacing: dp(2)
+                    ArcGauge:
+                        id: gauge_cpu
+                        size_hint_y: None
+                        height: dp(140)
+                        value: 0
+                        arc_color: 0.24, 0.86, 0.51, 1
+                    Label:
+                        id: lbl_cpu
+                        text: "CPU\n--%"
+                        font_size: sp(13)
+                        bold: True
+                        color: 1, 1, 1, 1
+                        halign: "center"
+                        size_hint_y: None
+                        height: dp(34)
+                    Label:
+                        id: lbl_cpu_detail
+                        text: "[sys]"
+                        font_size: sp(9)
+                        color: 0.5, 0.8, 0.5, 1
+                        halign: "center"
+                        size_hint_y: None
+                        height: dp(16)
+
+                # RAM gauge
+                BoxLayout:
+                    orientation: "vertical"
+                    spacing: dp(2)
+                    ArcGauge:
+                        id: gauge_ram
+                        size_hint_y: None
+                        height: dp(140)
+                        value: 0
+                        arc_color: 0.30, 0.75, 1, 1
+                    Label:
+                        id: lbl_ram
+                        text: "RAM\n--%"
+                        font_size: sp(13)
+                        bold: True
+                        color: 1, 1, 1, 1
+                        halign: "center"
+                        size_hint_y: None
+                        height: dp(34)
+                    Label:
+                        id: lbl_ram_detail
+                        text: "--- / ---"
+                        font_size: sp(9)
+                        color: 0.5, 0.7, 1, 1
+                        halign: "center"
+                        size_hint_y: None
+                        height: dp(16)
+
+                # Battery gauge
+                BoxLayout:
+                    orientation: "vertical"
+                    spacing: dp(2)
+                    ArcGauge:
+                        id: gauge_bat
+                        size_hint_y: None
+                        height: dp(140)
+                        value: 0
+                        arc_color: 0.98, 0.80, 0.10, 1
+                    Label:
+                        id: lbl_bat
+                        text: "BAT\n--%"
+                        font_size: sp(13)
+                        bold: True
+                        color: 1, 1, 1, 1
+                        halign: "center"
+                        size_hint_y: None
+                        height: dp(34)
+                    Label:
+                        id: lbl_bat_detail
+                        text: "---mA"
+                        font_size: sp(9)
+                        color: 1, 0.8, 0.3, 1
+                        halign: "center"
+                        size_hint_y: None
+                        height: dp(16)
+
+            Divider
+
+            # ── Network Row ───────────────────────────────────────────────
+            BoxLayout:
+                size_hint_y: None
+                height: dp(44)
+                padding: [dp(10), dp(4)]
+                spacing: dp(6)
+                canvas.before:
+                    Color:
+                        rgba: 0.10, 0.12, 0.20, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+
+                Label:
+                    text: "NETWORK"
+                    font_size: sp(10)
+                    color: 0.5, 0.6, 0.8, 1
+                    bold: True
+                    size_hint_x: None
+                    width: dp(70)
+                    halign: "left"
+                    text_size: self.size
+                    valign: "center"
+
+                Label:
+                    id: lbl_rx
+                    text: "▼ --"
+                    font_size: sp(14)
+                    bold: True
+                    color: 0.24, 0.86, 0.51, 1
+                    halign: "center"
+                    text_size: self.size
+                    valign: "center"
+
+                Label:
+                    id: lbl_tx
+                    text: "▲ --"
+                    font_size: sp(14)
+                    bold: True
+                    color: 1.0, 0.55, 0.15, 1
+                    halign: "center"
+                    text_size: self.size
+                    valign: "center"
+
+            # ── Battery Status ────────────────────────────────────────────
+            BoxLayout:
+                size_hint_y: None
+                height: dp(36)
+                padding: [dp(10), dp(4)]
+                canvas.before:
+                    Color:
+                        rgba: 0.10, 0.12, 0.20, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+
+                Label:
+                    text: "STATUS"
+                    font_size: sp(10)
+                    color: 0.5, 0.6, 0.8, 1
+                    bold: True
+                    size_hint_x: None
+                    width: dp(70)
+                    halign: "left"
+                    text_size: self.size
+                    valign: "center"
+
+                Label:
+                    id: lbl_bat_status
+                    text: "-- · --"
+                    font_size: sp(12)
+                    color: 0.85, 0.85, 0.85, 1
+                    halign: "left"
+                    text_size: self.size
+                    valign: "center"
+
+            Divider
+
+            # ── Temperature ───────────────────────────────────────────────
+            BoxLayout:
+                size_hint_y: None
+                height: dp(44)
+                padding: [dp(10), dp(4)]
+                spacing: dp(8)
+                canvas.before:
+                    Color:
+                        rgba: 0.10, 0.12, 0.20, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+
+                Label:
+                    text: "🌡 TEMP"
+                    font_size: sp(10)
+                    color: 0.5, 0.6, 0.8, 1
+                    bold: True
+                    size_hint_x: None
+                    width: dp(70)
+                    halign: "left"
+                    text_size: self.size
+                    valign: "center"
+
+                Label:
+                    id: lbl_temp
+                    text: "--°C"
+                    font_size: sp(22)
+                    bold: True
+                    color: 0.24, 0.86, 0.51, 1
+                    halign: "left"
+                    text_size: self.size
+                    valign: "center"
+
+            # ── Footer ────────────────────────────────────────────────────
+            Label:
+                text: "KingWatch Pro v15 • Google Play Compliant"
+                font_size: sp(9)
+                color: 0.3, 0.3, 0.4, 1
+                size_hint_y: None
+                height: dp(20)
+                halign: "center"
+                text_size: self.size
