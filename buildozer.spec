@@ -18,7 +18,11 @@ requirements = python3==3.11.0,kivy==2.3.0,pyjnius,android
 android.api    = 35
 android.minapi = 21
 android.ndk    = 25b
-android.sdk    = 35
+# android.sdk    = 35  <-- DELETED: This was causing your initial warning
+
+# ── Automation (REQUIRED FOR GITHUB ACTIONS) ──────────────────────────────
+# Automatically accept SDK licenses to prevent the build from hanging
+android.accept_sdk_license = True
 
 # ── FIXED: Pin build-tools to stable 34.0.0 ──────────────────────────────
 # Prevents buildozer from grabbing 37.0.0-rc2 (release candidate)
