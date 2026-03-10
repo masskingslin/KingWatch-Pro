@@ -2,8 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -25,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
@@ -34,40 +33,16 @@ jobs:
             zlib1g-dev autoconf automake libtool \
             pkg-config cmake libltdl-dev python3-dev
 
-      - name: Install Buildozer and Cython
-        run: pip install "cython==0.29.37" buildozer virtualenv
-
-      - name: Create sdkmanager wrapper
-        run: |
-          mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin
-          mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-          printf '#!/bin/sh\nexec "/usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager" "$@"\n' \
-            > ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          chmod +x ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\n" \
-            > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          printf "84831b9409646a918e30573bab4c9c91346d8abd\n" \
-            > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-          echo "Wrapper OK: $(~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --version)"
-          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null 2>&1 || true
+      - name: Install Buildozer
+        run: pip install buildozer cython==0.29.37
 
       - name: Build APK
-        run: buildozer android debug 2>&1 | tee build.log
+        run: buildozer android debug
         env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: KingApp-APK-${{ github.run_number }}
+          name: KingApp-APK
           path: bin/*.apk
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Upload log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-${{ github.run_number }}
-          path: build.log
-          retention-days: 7
