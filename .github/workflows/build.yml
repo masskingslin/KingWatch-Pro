@@ -51,11 +51,12 @@ jobs:
         pip install buildozer==1.5.0 cython==3.0.11
 
     # ── 6. Android SDK / NDK cache ───────────────────────────────────────
+    # FIX: Bumped cache key to v4 to abandon the corrupted SDK cache
     - name: Cache Android platform
       uses: actions/cache@v4
       with:
         path: ~/.buildozer/android/platform
-        key: android-platform-ndk25b-bt34-v3
+        key: android-platform-ndk25b-bt34-v4
         restore-keys: |
           android-platform-ndk25b-bt34-
 
@@ -68,9 +69,6 @@ jobs:
         restore-keys: pip-${{ runner.os }}-
 
     # ── 8. Pre-accept ALL Android SDK licenses ───────────────────────────
-    #    FIX for: "build-tools;37.0.0-rc2 license not accepted"
-    #             "build-tools folder not found"
-    #             "AIDL not found, please install it"
     - name: Accept Android SDK licenses
       run: |
         SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
@@ -85,7 +83,6 @@ jobs:
         ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     # ── 9. Write license files into buildozer SDK dir ────────────────────
-    #    Ensures buildozer never hits the "license not accepted" prompt
     - name: Pre-write SDK license files
       run: |
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
@@ -97,17 +94,22 @@ jobs:
           > ~/.buildozer/android/platform/android-sdk/licenses/android-googletv-license
         echo "License files written."
 
-    # ── 10. Build APK ─────────────────────────────────────────────────────
+    # ── 10. Failsafe SDK Cleanup ──────────────────────────────────────────
+    # FIX: Deletes any corrupted SDK folder that might have slipped through
+    - name: Clean corrupted Android SDK
+      run: |
+        rm -rf ~/.buildozer/android/platform/android-sdk/tools
+        rm -rf ~/.buildozer/android/platform/android-sdk/cmdline-tools
+
+    # ── 11. Build APK ─────────────────────────────────────────────────────
     - name: Build debug APK
       run: |
         buildozer android debug 2>&1 | tee build.log
       env:
-        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-        ANDROID_HOME: /usr/local/lib/android/sdk
         JAVA_HOME: ${{ env.JAVA_HOME }}
         GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
 
-    # ── 11. Show bin/ contents ────────────────────────────────────────────
+    # ── 12. Show bin/ contents ────────────────────────────────────────────
     - name: List built files
       if: always()
       run: |
@@ -116,7 +118,7 @@ jobs:
         echo "=== APKs anywhere ==="
         find . -name "*.apk" 2>/dev/null | head -10 || echo "none"
 
-    # ── 12. Upload APK ────────────────────────────────────────────────────
+    # ── 13. Upload APK ────────────────────────────────────────────────────
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
@@ -125,7 +127,7 @@ jobs:
         retention-days: 30
         if-no-files-found: error
 
-    # ── 13. Upload build log (always) ─────────────────────────────────────
+    # ── 14. Upload build log (always) ─────────────────────────────────────
     - name: Upload build log
       if: always()
       uses: actions/upload-artifact@v4
@@ -134,3 +136,4 @@ jobs:
         path: build.log
         retention-days: 7
         if-no-files-found: warn
+        
