@@ -1,1 +1,1 @@
-requirements = python3,kivy==2.3.0,requests
+python3,kivy==2.2.1,pyjnius,cython==0.29.36
