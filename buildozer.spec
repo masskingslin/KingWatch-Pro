@@ -27,10 +27,10 @@ fullscreen = 0
 # ─────────────────────────────────────────
 # Android API Levels
 # ─────────────────────────────────────────
-android.api = 35
+android.api = 33
 android.minapi = 21
 android.ndk = 25b
-android.build_tools_version = 34.0.0
+android.archs = arm64-v8a, armeabi-v7a
 
 # Automatically accept licenses (CI builds)
 android.accept_sdk_license = True
