@@ -2,8 +2,7 @@ name: Build KingWatch APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -17,37 +16,43 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y \
-          git zip unzip openjdk-17-jdk \
+          sudo apt install -y git zip unzip openjdk-17-jdk \
           python3-pip autoconf libtool pkg-config \
-          zlib1g-dev libncurses-dev \
-          cmake libffi-dev libssl-dev
+          zlib1g-dev libncurses-dev cmake \
+          libffi-dev libssl-dev
 
-      - name: Install Python packages
+      - name: Install Python tools
         run: |
           python3 -m pip install --upgrade pip
           pip install cython==0.29.36
           pip install buildozer
 
-      - name: Install Android SDK Commandline Tools
+      - name: Install Android SDK
         run: |
           mkdir -p $HOME/android-sdk
           cd $HOME/android-sdk
+
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
           unzip -q commandlinetools-linux-9477386_latest.zip
+
           mkdir -p cmdline-tools/latest
           mv cmdline-tools/* cmdline-tools/latest/ || true
 
-      - name: Setup Android SDK
-        run: |
           export ANDROID_HOME=$HOME/android-sdk
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
           yes | sdkmanager --licenses
 
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-31"
-          sdkmanager "build-tools;31.0.0"
+          sdkmanager --install \
+          "platform-tools" \
+          "platforms;android-31" \
+          "build-tools;31.0.0"
+
+      - name: Force build-tools path for Buildozer
+        run: |
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/build-tools
+          ln -s $HOME/android-sdk/build-tools/31.0.0 \
+          $HOME/.buildozer/android/platform/android-sdk/build-tools/31.0.0 || true
 
       - name: Build APK
         run: |
