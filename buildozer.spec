@@ -11,7 +11,7 @@ source.include_exts = py,kv,png,jpg,atlas,json
 version = 1.0
 
 # Python / Kivy requirements
-requirements = python3,kivy==2.2.1,pyjnius
+requirements = python3,kivy==2.2.1,pyjnius,cython==0.29.36
 
 # Screen orientation
 orientation = portrait
