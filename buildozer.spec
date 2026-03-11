@@ -14,7 +14,6 @@ android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.ndk_api = 21
-android.sdk = 33
 android.archs = arm64-v8a, armeabi-v7a
 android.accept_sdk_license = True
 android.enable_androidx = True
