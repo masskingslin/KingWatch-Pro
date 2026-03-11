@@ -2,19 +2,19 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+   branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
 
-      - name: Checkout repository
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -26,11 +26,11 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y \
-            zip unzip openjdk-17-jdk \
-            autoconf libtool pkg-config \
+            git zip unzip openjdk-17-jdk \
+            python3-pip autoconf libtool pkg-config \
             zlib1g-dev libncurses5-dev \
             libffi-dev libssl-dev \
-            build-essential ccache git
+            build-essential ccache
 
       - name: Install Buildozer
         run: |
