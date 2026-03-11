@@ -24,6 +24,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Install Gradle 8
+        run: |
+          wget https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip gradle-8.7-bin.zip
+          echo "$PWD/gradle-8.7/bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
