@@ -3,46 +3,31 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            build-essential git zip unzip \
-            libffi-dev libssl-dev libncurses5-dev \
-            zlib1g-dev autoconf automake libtool \
-            pkg-config cmake libltdl-dev python3-dev
+          python-version: 3.11
 
       - name: Install Buildozer
-        run: pip install buildozer cython==0.29.37
+        run: |
+          pip install buildozer
+          sudo apt update
+          sudo apt install -y zip unzip openjdk-17-jdk
 
       - name: Build APK
         run: buildozer android debug
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: KingApp-APK
+          name: kingwatch-apk
           path: bin/*.apk
