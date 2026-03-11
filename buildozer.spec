@@ -12,7 +12,7 @@ version = 1.0
 # ── Dependencies ────────────────────────────────────────────────────────────
 # python3 is implicit — do NOT list it alone, causes recipe conflicts
 # kivy pinned to last stable; pyjnius needed for Java bridge
-requirements = python3,kivy==2.2.1,pyjnius
+requirements = python3==3.10,kivy==2.3.0,pyjnius==1.6.1
 
 # ── Orientation / UI ────────────────────────────────────────────────────────
 orientation = portrait
