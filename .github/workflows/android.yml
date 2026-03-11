@@ -1,4 +1,4 @@
-name: Build APK
+name: Build KingWatch APK
 
 on:
   push:
@@ -8,20 +8,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build
-        uses: ArtemSBulgakov/buildozer-action@v1
+      - uses: ArtemSBulgakov/buildozer-action@v1
         id: buildozer
+        env:
+          USER: runner
         with:
           command: buildozer android debug
           buildozer_version: stable
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: KingWatch-APK
           path: ${{ steps.buildozer.outputs.filename }}
