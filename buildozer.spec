@@ -19,7 +19,7 @@ orientation = portrait
 fullscreen = 0
 
 # Android API
-android.api = 34
+android.api = 33
 android.minapi = 21
 
 # Android NDK
