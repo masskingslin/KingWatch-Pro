@@ -2,36 +2,35 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt update
           sudo apt install -y git zip unzip openjdk-17-jdk python3-pip wget
 
       - name: Install python packages
         run: |
-          pip install --upgrade pip
+          python3 -m pip install --upgrade pip
           pip install buildozer cython==0.29.36
 
       - name: Install Android SDK
         run: |
           mkdir -p $HOME/android-sdk
           cd $HOME/android-sdk
-wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-unzip commandlinetools-linux-9477386_latest.zip
-
-mkdir -p cmdline-tools
-mv cmdline-tools/* cmdline-tools-temp || true
-mv cmdline-tools-temp cmdline-tools/latest || true
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ || true
 
       - name: Setup SDK
         run: |
