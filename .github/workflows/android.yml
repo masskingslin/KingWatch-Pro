@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build KingWatch APK
 
 on:
   push:
@@ -7,47 +7,54 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip wget
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+        git zip unzip openjdk-17-jdk \
+        python3-pip autoconf libtool pkg-config \
+        zlib1g-dev libncurses5-dev libtinfo5 \
+        cmake libffi-dev libssl-dev
 
-      - name: Install python packages
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install buildozer cython==0.29.36
+    - name: Install Python packages
+      run: |
+        python3 -m pip install --upgrade pip
+        pip install cython==0.29.36
+        pip install buildozer
 
-      - name: Install Android SDK
-        run: |
-          mkdir -p $HOME/android-sdk
-          cd $HOME/android-sdk
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q commandlinetools-linux-9477386_latest.zip
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/ || true
+    - name: Setup Android SDK
+      run: |
+        mkdir -p $HOME/android-sdk
+        cd $HOME/android-sdk
 
-      - name: Setup SDK
-        run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-31"
-          sdkmanager "build-tools;31.0.0"
+        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip commandlinetools-linux-9477386_latest.zip
 
-      - name: Build APK
-        run: |
-          export ANDROIDSDK=$HOME/android-sdk
-          buildozer android debug
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ || true
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: kingwatch-apk
-          path: bin/*.apk
+        export ANDROID_HOME=$HOME/android-sdk
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+
+        yes | sdkmanager --licenses
+
+        sdkmanager "platform-tools"
+        sdkmanager "platforms;android-31"
+        sdkmanager "build-tools;31.0.0"
+
+    - name: Build APK
+      run: |
+        export ANDROIDSDK=$HOME/android-sdk
+        buildozer android debug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: KingWatch-Pro-APK
+        path: bin/*.apk
