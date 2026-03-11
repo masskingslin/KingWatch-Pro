@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+   branches: [ main ]
 
 jobs:
   build:
@@ -13,11 +13,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y \
-          git zip unzip openjdk-17-jdk \
+          sudo apt install -y git zip unzip openjdk-17-jdk \
           python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev \
           libtinfo5 cmake libffi-dev libssl-dev
@@ -26,6 +25,10 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip install buildozer cython==0.29.36
+
+      - name: Accept Android licenses
+        run: |
+          yes | sdkmanager --licenses || true
 
       - name: Build APK
         run: |
