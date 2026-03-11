@@ -1,44 +1,123 @@
 name: Build KingWatch APK
+
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-22.04
-    env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+    timeout-minutes: 60
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python ────────────────────────────────────────────────────────────
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      - name: Install all dependencies
+          python-version: "3.10"
+
+      # ── 3. System dependencies ───────────────────────────────────────────────
+      - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y git zip unzip openjdk-17-jdk build-essential libssl-dev libffi-dev python3-dev autoconf libtool pkg-config cmake
-          pip install --upgrade pip
-          pip install buildozer==1.5.0 cython==0.29.33
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
-          cd $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-11076708_latest.zip
-          mv cmdline-tools latest
-          yes | ./latest/bin/sdkmanager --licenses || true
-          ./latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.2" "platform-tools"
-      - name: Build APK
+          sudo apt-get install -y --no-install-recommends \
+            git zip unzip curl wget \
+            build-essential ccache \
+            libffi-dev libssl-dev \
+            libsqlite3-dev \
+            autoconf libtool \
+            pkg-config \
+            cmake \
+            libltdl-dev \
+            python3-dev \
+            openjdk-17-jdk-headless
+
+      # ── 4. Java ──────────────────────────────────────────────────────────────
+      - name: Set JAVA_HOME
         run: |
-          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          buildozer android debug 2>&1 | tee build.log
-      - name: Upload APK
+          echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))" >> $GITHUB_ENV
+
+      # ── 5. pip packages ──────────────────────────────────────────────────────
+      - name: Install Python build tools
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install buildozer==1.5.0
+          pip install cython==0.29.33
+
+      # ── 6. Android SDK / NDK cache ───────────────────────────────────────────
+      - name: Cache Android SDK, NDK and buildozer global
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer/android/platform/android-sdk
+            ~/.buildozer/android/platform/android-ndk-r25b
+          key: android-sdk-ndk-${{ runner.os }}-r25b-sdk33
+          restore-keys: |
+            android-sdk-ndk-${{ runner.os }}-
+
+      # ── 7. Buildozer local cache ─────────────────────────────────────────────
+      - name: Cache buildozer local build
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('main.py') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-
+            buildozer-${{ runner.os }}-
+
+      # ── 8. Accept Android licenses ───────────────────────────────────────────
+      - name: Pre-accept Android SDK licenses
+        run: |
+          mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+
+      # ── 9. Build APK ─────────────────────────────────────────────────────────
+      - name: Build debug APK with buildozer
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+        run: |
+          # Show spec for debug
+          echo "=== buildozer.spec ==="
+          cat buildozer.spec
+          echo "=== main.py head ==="
+          head -50 main.py || echo "main.py not found!"
+          echo "====================="
+          # Run buildozer
+          buildozer -v android debug 2>&1 | tee build_output.log
+          echo "Exit code: $?"
+
+      # ── 10. Show build result ────────────────────────────────────────────────
+      - name: Check APK produced
+        run: |
+          echo "Contents of bin/:"
+          ls -lh bin/ 2>/dev/null || echo "bin/ directory does not exist"
+          echo "APK files:"
+          find . -name "*.apk" 2>/dev/null || echo "No APK found"
+
+      # ── 11. Upload APK ───────────────────────────────────────────────────────
+      - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: KingWatch-APK
+          name: KingWatch-Pro-debug
           path: bin/*.apk
           if-no-files-found: error
-      - name: Upload log
+
+      # ── 12. Upload full log (always) ─────────────────────────────────────────
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: build.log
+          path: build_output.log
+          if-no-files-found: warn
