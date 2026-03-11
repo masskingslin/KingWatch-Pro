@@ -3,28 +3,43 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
-      - name: Checkout
+
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            zip unzip openjdk-17-jdk \
+            autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev \
+            libffi-dev libssl-dev \
+            build-essential ccache git
 
       - name: Install Buildozer
         run: |
-          pip install buildozer
-          sudo apt update
-          sudo apt install -y zip unzip openjdk-17-jdk
+          pip install --upgrade pip
+          pip install buildozer cython
 
       - name: Build APK
-        run: buildozer android debug
+        run: |
+          buildozer android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
