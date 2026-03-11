@@ -16,7 +16,7 @@ version = 16.0
 # ─────────────────────────────────────────
 # Requirements
 # ─────────────────────────────────────────
-requirements = python3==3.11.0,kivy==2.3.0,pyjnius,android
+requirements = python3==3.10.11,kivy==2.2.1,pyjnius,android
 
 # ─────────────────────────────────────────
 # Orientation / UI
