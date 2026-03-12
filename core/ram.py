@@ -1,16 +1,12 @@
-class RAMMonitor:
-
-    def get(self):
-        try:
-            with open("/proc/meminfo") as f:
-                lines = f.readlines()
-
-            total = int(lines[0].split()[1])
-            free = int(lines[1].split()[1])
-
-            used = total - free
-
-            return int((used / total) * 100)
-
-        except:
-            return 40
+def get_ram():
+    try:
+        mem = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                k, v = line.split()[0].rstrip(":"), line.split()[1]
+                mem[k] = int(v)
+        total     = mem.get("MemTotal", 1)
+        available = mem.get("MemAvailable", mem.get("MemFree", 0))
+        return round((total - available) / total * 100, 1)
+    except Exception:
+        return 0.0
