@@ -1,8 +1,12 @@
-
 from kivy.app import App
+from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 
+# IMPORT UI WIDGETS FIRST
+from ui.widgets import MonitorWidget
+
+# IMPORT CORE MODULES
 from core.cpu import get_cpu
 from core.ram import get_ram
 from core.battery import get_battery
@@ -26,8 +30,11 @@ class RootWidget(BoxLayout):
 class KingWatchApp(App):
 
     def build(self):
-        root = RootWidget()
+
+        root = Builder.load_file("kingwatch.kv")
+
         Clock.schedule_interval(root.update_stats, 3)
+
         return root
 
 
