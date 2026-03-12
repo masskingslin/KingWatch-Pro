@@ -10,8 +10,9 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.utils import get_color_from_hex
-from kivy.properties import ColorProperty, StringProperty
+from kivy.properties import ColorProperty
 
+# Register widget classes with KV
 from ui.widgets import StatCard, ThemeChip  # noqa
 
 from themes import THEME_NAMES, get_theme, DEFAULT_THEME
@@ -24,9 +25,10 @@ from core.thermal import get_thermal
 
 
 class RootWidget(BoxLayout):
+
     bg      = ColorProperty(get_color_from_hex("#0A0A0A"))
     card    = ColorProperty(get_color_from_hex("#161616"))
-    card2   = ColorProperty(get_color_from_hex("#1E1E1E"))
+    card2   = ColorProperty(get_color_from_hex("#242424"))
     accent  = ColorProperty(get_color_from_hex("#00E676"))
     dim     = ColorProperty(get_color_from_hex("#555555"))
     div     = ColorProperty(get_color_from_hex("#222222"))
@@ -37,23 +39,24 @@ class RootWidget(BoxLayout):
     def on_kv_post(self, *a):
         self._build_chips()
         self._apply_theme(DEFAULT_THEME)
-        self.update_stats()
+        # Warm up CPU stat (first read returns 0, second is real)
+        get_cpu()
+        Clock.schedule_once(self.update_stats, 1)
         Clock.schedule_interval(self.update_stats, 3)
 
-    # ── THEME CHIPS ─────────────────────────────
+    # ── THEME ──────────────────────────────────
     def _build_chips(self):
         row = self.ids.chips_row
         row.clear_widgets()
         for name in THEME_NAMES:
             chip = ThemeChip(label=name)
-            # Use Button-style: wrap in a real touch handler
-            chip._kw_name = name
-            chip.bind(on_touch_up=self._chip_touched)
+            chip._name = name
+            chip.bind(on_touch_up=self._on_chip)
             row.add_widget(chip)
 
-    def _chip_touched(self, chip, touch):
+    def _on_chip(self, chip, touch):
         if chip.collide_point(*touch.pos):
-            self._apply_theme(chip._kw_name)
+            self._apply_theme(chip._name)
             return True
 
     def _apply_theme(self, name):
@@ -67,32 +70,31 @@ class RootWidget(BoxLayout):
         self.div     = get_color_from_hex(t["CARD2"])
         self.btn_txt = get_color_from_hex(t["BTN_TEXT"])
         self._style_chips(t)
-        # DON'T call update_stats here — avoid blocking call on theme tap
 
     def _style_chips(self, t):
         try:
             for chip in self.ids.chips_row.children:
-                sel = chip.label == self._tname
-                chip.selected   = sel
-                chip.chip_bg    = get_color_from_hex(
-                    t["ACCENT"] + "44") if sel else get_color_from_hex(t["CARD2"])
+                sel = (chip.label == self._tname)
+                chip.selected    = sel
+                chip.chip_bg     = get_color_from_hex(
+                    t["ACCENT"] + "33") if sel else get_color_from_hex(t["CARD"])
                 chip.chip_border = get_color_from_hex(
-                    t["ACCENT"]) if sel else get_color_from_hex(t["CARD2"])
-                chip.chip_text  = get_color_from_hex(
-                    t["ACCENT"]) if sel else get_color_from_hex(t["DIM"])
+                    t["ACCENT"])       if sel else get_color_from_hex(t["CARD2"])
+                chip.chip_text   = get_color_from_hex(
+                    t["ACCENT"])       if sel else get_color_from_hex(t["DIM"])
         except Exception:
             pass
 
-    # ── SENSORS ─────────────────────────────────
+    # ── SENSORS ────────────────────────────────
     def update_stats(self, *a):
         t   = get_theme(self._tname)
         acc = t["ACCENT"]
         wrn = t["WARN"]
         dng = t["DANGER"]
 
-        def bar_clr(pct):
-            if pct >= 90: return get_color_from_hex(dng)
-            if pct >= 75: return get_color_from_hex(wrn)
+        def clr(pct, lo=75, hi=90):
+            if pct >= hi: return get_color_from_hex(dng)
+            if pct >= lo: return get_color_from_hex(wrn)
             return get_color_from_hex(acc)
 
         # CPU
@@ -100,11 +102,12 @@ class RootWidget(BoxLayout):
             v = float(get_cpu())
             c = self.ids.cpu_card
             c.value     = f"{v}%"
-            c.subtitle  = "of total"
+            c.subtitle  = "usage"
             c.bar_pct   = v
-            c.bar_color = bar_clr(v)
+            c.bar_color = clr(v)
+            c.detail1   = ""
         except Exception:
-            self.ids.cpu_card.value = "N/A"
+            self.ids.cpu_card.value = "ERR"
 
         # RAM
         try:
@@ -113,10 +116,10 @@ class RootWidget(BoxLayout):
             c.value     = f"{v}%"
             c.subtitle  = "used"
             c.bar_pct   = v
-            c.bar_color = bar_clr(v)
+            c.bar_color = clr(v)
             c.detail1   = detail
         except Exception:
-            self.ids.ram_card.value = "N/A"
+            self.ids.ram_card.value = "ERR"
 
         # Storage
         try:
@@ -125,59 +128,64 @@ class RootWidget(BoxLayout):
             c.value     = f"{v}%"
             c.subtitle  = "used"
             c.bar_pct   = v
-            c.bar_color = bar_clr(v)
+            c.bar_color = clr(v)
             c.detail1   = detail
         except Exception:
-            self.ids.storage_card.value = "N/A"
+            self.ids.storage_card.value = "ERR"
 
-        # Battery
+        # Battery — dict return
         try:
-            cap, status, cur_str, volt_str, power_str, temp_str, eta_str = get_battery()
+            b = get_battery()
+            pct = b["pct"]
             c = self.ids.battery_card
-            c.value     = f"{cap:.0f}%"
-            c.subtitle  = status
-            c.bar_pct   = cap
-            c.bar_color = (
-                get_color_from_hex(dng) if cap <= 10
-                else get_color_from_hex(wrn) if cap <= 20
-                else get_color_from_hex(acc)
-            )
-            c.detail1 = f"Curr: {cur_str}   Volt: {volt_str}   Pwr: {power_str}"
-            c.detail2 = f"Temp: {temp_str}   ETA: {eta_str}"
+            c.value    = f"{pct:.0f}%"
+            c.subtitle = b["status"]
+            c.bar_pct  = pct
+            # Battery bar: low = danger, charging high = green
+            if "Charg" in b["status"]:
+                c.bar_color = get_color_from_hex(acc)
+            else:
+                c.bar_color = (get_color_from_hex(dng) if pct <= 10
+                               else get_color_from_hex(wrn) if pct <= 20
+                               else get_color_from_hex(acc))
+            c.detail1  = f"Curr: {b['cur']}   Volt: {b['volt']}   Pwr: {b['power']}"
+            c.detail2  = f"Temp: {b['temp']}   ETA: {b['eta']}"
         except Exception:
-            self.ids.battery_card.value = "N/A"
+            self.ids.battery_card.value = "ERR"
 
-        # Network
+        # Network — dict return, auto-refreshes (no button needed)
         try:
-            total, dl, ul, ping_str, signal_str = get_network()
+            n = get_network()
             c = self.ids.network_card
-            c.value   = total
-            c.subtitle = ping_str
-            c.detail1 = f"DL: {dl}   UL: {ul}"
-            c.detail2 = f"Signal: {signal_str}"
+            c.value    = n["dl"]
+            c.subtitle = n["ping"]
+            c.detail1  = f"DL: {n['dl']}   UL: {n['ul']}"
+            c.detail2  = f"Ping: {n['ping']}   {n['iface']}"
         except Exception:
-            self.ids.network_card.value = "N/A"
+            self.ids.network_card.value = "ERR"
 
         # Thermal
         try:
             max_t, cpu_t, detail = get_thermal()
             c = self.ids.thermal_card
-            c.value     = f"{max_t}°C"
-            c.subtitle  = f"CPU {cpu_t}°C"
-            bar         = min(max_t / 120.0 * 100, 100)
-            c.bar_pct   = bar
-            c.bar_color = bar_clr(bar)
-            c.detail1   = detail
+            c.value    = f"{max_t}°C"
+            c.subtitle = f"CPU {cpu_t}°C"
+            bar        = min(max_t / 120.0 * 100, 100)
+            c.bar_pct  = bar
+            c.bar_color = clr(bar, lo=54, hi=75)  # 65°C warn, 90°C danger
+            c.detail1  = detail
         except Exception:
-            self.ids.thermal_card.value = "N/A"
+            self.ids.thermal_card.value = "ERR"
 
 
-class KingWatchApp(App):
+# ── APP — renamed to MonitorApp to prevent Kivy auto-loading kingwatch.kv ──
+class MonitorApp(App):
     def build(self):
         Window.clearcolor = (0, 0, 0, 1)
+        # Manual load — no double load since class name != kv file name
         Builder.load_file(os.path.join(app_dir, "kingwatch.kv"))
         return RootWidget()
 
 
 if __name__ == "__main__":
-    KingWatchApp().run()
+    MonitorApp().run()
