@@ -1,147 +1,30 @@
-<Dashboard>:
+<RootWidget>:
     orientation: "vertical"
-    spacing: dp(15)
-    padding: dp(15)
+    padding: 20
+    spacing: 20
 
-    canvas.before:
-        Color:
-            rgba: app.theme["bg"]
-        Rectangle:
-            pos: self.pos
-            size: self.size
+    Label:
+        text: "KingWatch Pro"
+        font_size: "28sp"
+        bold: True
 
-    # HEADER
     BoxLayout:
+        orientation: "vertical"
+        spacing: 10
+
+        Label:
+            text: "CPU Monitor"
+
+        Label:
+            text: "RAM Monitor"
+
+        Label:
+            text: "Battery Monitor"
+
+        Label:
+            text: "Network Monitor"
+
+    Button:
+        text: "Refresh"
         size_hint_y: None
-        height: dp(50)
-
-        Label:
-            text: "KINGWATCH PRO"
-            bold: True
-            font_size: "22sp"
-            color: app.theme["accent"]
-
-        Label:
-            id: lbl_clock
-            text: "06:01:47"
-            color: 0.7,0.7,0.8,1
-
-        Button:
-            text: app.theme_name
-            size_hint_x: None
-            width: dp(120)
-            background_color: app.theme["accent"]
-            on_release: app.next_theme()
-
-    # BATTERY CARD
-    BoxLayout:
-        size_hint_y: None
-        height: dp(120)
-        padding: dp(15)
-        canvas.before:
-            Color:
-                rgba: app.theme["card"]
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [20]
-
-        Label:
-            text: "BATTERY\\n53%"
-            color: app.theme["good"]
-            font_size: "26sp"
-
-    # NETWORK CARD
-    BoxLayout:
-        size_hint_y: None
-        height: dp(120)
-        padding: dp(15)
-
-        canvas.before:
-            Color:
-                rgba: app.theme["card"]
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [20]
-
-        BoxLayout:
-            orientation: "vertical"
-            Label:
-                text: "UPLOAD"
-                color: 1,0.4,0.4,1
-            Label:
-                id: lbl_tx
-                text: "0.0B/s"
-
-        BoxLayout:
-            orientation: "vertical"
-            Label:
-                text: "DOWNLOAD"
-                color: app.theme["accent"]
-            Label:
-                id: lbl_rx
-                text: "0.0B/s"
-
-        BoxLayout:
-            orientation: "vertical"
-            Label:
-                text: "TOTAL RX"
-                color: 0.7,0.7,0.7,1
-            Label:
-                id: lbl_total
-                text: "0GB"
-
-    # GAUGE ROW
-    BoxLayout:
-        size_hint_y: None
-        height: dp(170)
-        spacing: dp(10)
-
-        ArcGauge:
-            id: gauge_cpu
-            label: "SYS CPU"
-
-        ArcGauge:
-            id: gauge_ram
-            label: "RAM"
-
-        ArcGauge:
-            id: gauge_storage
-            label: "STORAGE"
-
-    # MEMORY BAR
-    BoxLayout:
-        size_hint_y: None
-        height: dp(70)
-        padding: dp(10)
-
-        canvas.before:
-            Color:
-                rgba: app.theme["card"]
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [20]
-
-        ProgressBar:
-            id: mem_bar
-            max: 100
-            value: 60
-
-    # INFO ROW
-    GridLayout:
-        cols: 4
-        size_hint_y: None
-        height: dp(90)
-        padding: dp(15)
-        spacing: dp(10)
-
-        Label:
-            text: "PROCS\\n1"
-        Label:
-            text: "FREQ\\n1805MHz"
-        Label:
-            text: "UPTIME\\n196h"
-        Label:
-            text: "CORES\\n8"
+        height: "50dp"
