@@ -15,7 +15,6 @@ source.exclude_dirs = tests,bin,.buildozer,.git,__pycache__,*.egg-info
 version = 3.0.0
 
 # ── Requirements ───────────────────────────
-# NO psutil — pure Android /proc + /sys reads
 requirements = python3,kivy==2.3.0,plyer,pillow
 
 # ── Display ────────────────────────────────
