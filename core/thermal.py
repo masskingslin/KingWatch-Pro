@@ -23,5 +23,5 @@ def get_thermal():
                 cpu_t = t
                 break
     top3   = sorted(zones.items(), key=lambda x: -x[1])[:3]
-    detail = "  ".join(f"{k[:9]}:{v}°" for k, v in top3)
+    detail = "  ".join(f"{k[:9]}:{v}deg" for k, v in top3)
     return max_t, cpu_t, detail
