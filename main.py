@@ -15,7 +15,7 @@ from kivy.properties import ColorProperty
 from ui.widgets import StatCard, ThemeChip  # noqa
 
 from themes import THEME_NAMES, get_theme, DEFAULT_THEME
-from core.cpu     import get_cpu
+from core.cpu     import get_cpu, get_cpu_freq, get_cpu_cores, get_cpu_procs, get_cpu_uptime
 from core.ram     import get_ram
 from core.battery import get_battery
 from core.network import get_network
@@ -38,12 +38,9 @@ class RootWidget(BoxLayout):
     def on_kv_post(self, *a):
         self._build_chips()
         self._apply_theme(DEFAULT_THEME)
-        # First update immediately — cpu.py does its own 0.3s sample
         self.update_stats()
-        # Then every 3 seconds
         Clock.schedule_interval(self.update_stats, 3)
 
-    # ── THEME ──────────────────────────────────────────
     def _build_chips(self):
         row = self.ids.chips_row
         row.clear_widgets()
@@ -84,7 +81,6 @@ class RootWidget(BoxLayout):
         except Exception:
             pass
 
-    # ── SENSORS ────────────────────────────────────────
     def update_stats(self, *a):
         t   = get_theme(self._tname)
         acc = t["ACCENT"]
@@ -96,43 +92,44 @@ class RootWidget(BoxLayout):
             if pct >= lo: return get_color_from_hex(wrn)
             return get_color_from_hex(acc)
 
-        # ── CPU ──────────────────────────────────────
+        # CPU
         try:
             v = float(get_cpu())
             c = self.ids.cpu_card
-            c.value     = f"{v}%"
-            c.subtitle  = "usage"
-            c.bar_pct   = v
+            c.value    = f"{v}%"
+            c.subtitle = "usage"
+            c.bar_pct  = v
             c.bar_color = clr(v)
-            c.detail1   = ""
+            c.detail1  = f"Freq: {get_cpu_freq()}   Cores: {get_cpu_cores()}"
+            c.detail2  = f"Procs: {get_cpu_procs()}   Up: {get_cpu_uptime()}"
         except Exception:
             self.ids.cpu_card.value = "ERR"
 
-        # ── RAM ──────────────────────────────────────
+        # RAM
         try:
             v, detail = get_ram()
             c = self.ids.ram_card
-            c.value     = f"{v}%"
-            c.subtitle  = "used"
-            c.bar_pct   = v
+            c.value    = f"{v}%"
+            c.subtitle = "used"
+            c.bar_pct  = v
             c.bar_color = clr(v)
-            c.detail1   = detail
+            c.detail1  = detail
         except Exception:
             self.ids.ram_card.value = "ERR"
 
-        # ── Storage ───────────────────────────────────
+        # Storage
         try:
             v, detail = get_storage()
             c = self.ids.storage_card
-            c.value     = f"{v}%"
-            c.subtitle  = "used"
-            c.bar_pct   = v
+            c.value    = f"{v}%"
+            c.subtitle = "used"
+            c.bar_pct  = v
             c.bar_color = clr(v)
-            c.detail1   = detail
+            c.detail1  = detail
         except Exception:
             self.ids.storage_card.value = "ERR"
 
-        # ── Battery ───────────────────────────────────
+        # Battery
         try:
             b   = get_battery()
             pct = b["pct"]
@@ -151,19 +148,18 @@ class RootWidget(BoxLayout):
         except Exception:
             self.ids.battery_card.value = "ERR"
 
-        # ── Network ───────────────────────────────────
+        # Network
         try:
             n = get_network()
             c = self.ids.network_card
-            # Show DL as main value
-            c.value   = n["dl"] if n["dl"] != "--" else "Measuring..."
+            c.value   = n["dl"]
             c.subtitle = n["ping"]
             c.detail1 = f"DL: {n['dl']}   UL: {n['ul']}"
             c.detail2 = f"Ping: {n['ping']}   {n['iface']}"
         except Exception:
             self.ids.network_card.value = "ERR"
 
-        # ── Thermal ───────────────────────────────────
+        # Thermal
         try:
             max_t, cpu_t, detail = get_thermal()
             c = self.ids.thermal_card
@@ -177,7 +173,6 @@ class RootWidget(BoxLayout):
             self.ids.thermal_card.value = "ERR"
 
 
-# Named MonitorApp — prevents Kivy auto-loading kingwatch.kv twice
 class MonitorApp(App):
     def build(self):
         Window.clearcolor = (0, 0, 0, 1)
