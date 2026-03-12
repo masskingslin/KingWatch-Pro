@@ -6,7 +6,7 @@ def get_cpu():
         with open("/proc/stat") as f:
             parts = f.readline().split()[1:]
         vals  = [int(x) for x in parts]
-        idle  = vals[3] + vals[4]   # idle + iowait
+        idle  = vals[3] + vals[4]
         total = sum(vals)
         if _prev is None:
             _prev = (idle, total)
