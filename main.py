@@ -1,7 +1,7 @@
 import os
 import sys
 
-# Fix import paths for Android
+# Android-safe path setup
 app_dir = os.path.dirname(os.path.abspath(__file__))
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
@@ -10,11 +10,12 @@ from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
+from kivy.core.window import Window
 
-# Import widgets
-from ui.widgets import CircularGauge, InfoCard
+# Import widgets (registers InfoCard with KV)
+from ui.widgets import InfoCard  # noqa
 
-# Import core modules
+# Import core monitors
 from core.cpu import get_cpu
 from core.ram import get_ram
 from core.battery import get_battery
@@ -26,38 +27,29 @@ from core.thermal import get_temp
 class RootWidget(BoxLayout):
 
     def update_stats(self, *args):
-        try:
-            self.ids.cpu_widget.value = str(get_cpu()) + "%"
-        except Exception as e:
-            self.ids.cpu_widget.value = "N/A"
-        try:
-            self.ids.ram_widget.value = str(get_ram()) + "%"
-        except Exception as e:
-            self.ids.ram_widget.value = "N/A"
-        try:
-            self.ids.battery_widget.value = str(get_battery()) + "%"
-        except Exception as e:
-            self.ids.battery_widget.value = "N/A"
-        try:
-            self.ids.network_widget.value = str(get_network())
-        except Exception as e:
-            self.ids.network_widget.value = "N/A"
-        try:
-            self.ids.storage_widget.value = str(get_storage()) + "%"
-        except Exception as e:
-            self.ids.storage_widget.value = "N/A"
-        try:
-            self.ids.temp_widget.value = str(get_temp()) + "°C"
-        except Exception as e:
-            self.ids.temp_widget.value = "N/A"
+        pairs = [
+            ("cpu_widget",     get_cpu,     "%"),
+            ("ram_widget",     get_ram,     "%"),
+            ("battery_widget", get_battery, "%"),
+            ("network_widget", get_network, ""),
+            ("storage_widget", get_storage, "%"),
+            ("temp_widget",    get_temp,    "°C"),
+        ]
+        for widget_id, func, unit in pairs:
+            try:
+                val = func()
+                self.ids[widget_id].value = f"{val}{unit}"
+            except Exception:
+                self.ids[widget_id].value = "N/A"
 
 
 class KingWatchApp(App):
 
     def build(self):
-        # Android-safe KV file loading
+        Window.clearcolor = (0, 0, 0, 1)
         kv_path = os.path.join(app_dir, "kingwatch.kv")
         root = Builder.load_file(kv_path)
+        root.update_stats()
         Clock.schedule_interval(root.update_stats, 3)
         return root
 
