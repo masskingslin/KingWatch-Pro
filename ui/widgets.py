@@ -11,7 +11,7 @@ from kivy.graphics import Color, Line, Ellipse, RoundedRectangle
 
 class ArcGauge(Widget):
     """
-    Circular arc gauge — fills clockwise from bottom-left.
+    Circular arc gauge -- fills clockwise from bottom-left.
     Shows percentage as a colored arc with a glowing dot at tip.
     """
     pct        = NumericProperty(0)
@@ -57,7 +57,7 @@ class ArcGauge(Widget):
 
 class SparkLine(Widget):
     """
-    Mini live trend line — last N readings as a sparkline.
+    Mini live trend line -- last N readings as a sparkline.
     """
     points_data = ListProperty([])
     line_color  = ColorProperty(get_color_from_hex("#00E676"))
