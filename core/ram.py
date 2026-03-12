@@ -1,18 +1,16 @@
 class RAMMonitor:
 
-    def read(self):
-        mem = {}
+    def get(self):
+        try:
+            with open("/proc/meminfo") as f:
+                lines = f.readlines()
 
-        with open("/proc/meminfo") as f:
-            for line in f:
-                parts = line.split()
-                mem[parts[0].rstrip(":")] = int(parts[1])
+            total = int(lines[0].split()[1])
+            free = int(lines[1].split()[1])
 
-        total = mem["MemTotal"]
-        free = mem["MemAvailable"]
+            used = total - free
 
-        used = total - free
+            return int((used / total) * 100)
 
-        percent = used / total * 100
-
-        return percent, used, total
+        except:
+            return 40
