@@ -1,27 +1,34 @@
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.widget import Widget
-from kivy.properties import StringProperty, ColorProperty, NumericProperty, BooleanProperty
+from kivy.properties import (
+    StringProperty, ColorProperty,
+    NumericProperty, BooleanProperty, ListProperty
+)
 from kivy.utils import get_color_from_hex
 
 
-class InfoCard(BoxLayout):
-    """Standard sensor card with optional progress bar and detail line."""
+class StatCard(BoxLayout):
+    """Full sensor card: title, value, progress bar, 2 detail rows."""
     title        = StringProperty("--")
     value        = StringProperty("...")
-    detail       = StringProperty("")
-    bar_value    = NumericProperty(0)      # 0-100 for progress bar
+    subtitle     = StringProperty("")     # line below value
+    detail1      = StringProperty("")     # detail row 1
+    detail2      = StringProperty("")     # detail row 2
+    bar_pct      = NumericProperty(0)     # 0–100
     show_bar     = BooleanProperty(False)
-    bg_color     = ColorProperty(get_color_from_hex("#1E1E1E"))
-    title_color  = ColorProperty(get_color_from_hex("#AAAAAA"))
-    value_color  = ColorProperty(get_color_from_hex("#00C853"))
-    bar_color    = ColorProperty(get_color_from_hex("#00C853"))
-    detail_color = ColorProperty(get_color_from_hex("#666666"))
+    bg_color     = ColorProperty(get_color_from_hex("#161616"))
+    title_color  = ColorProperty(get_color_from_hex("#555555"))
+    value_color  = ColorProperty(get_color_from_hex("#00E676"))
+    bar_color    = ColorProperty(get_color_from_hex("#00E676"))
+    bar_bg       = ColorProperty(get_color_from_hex("#2A2A2A"))
+    sub_color    = ColorProperty(get_color_from_hex("#888888"))
+    detail_color = ColorProperty(get_color_from_hex("#555555"))
 
 
 class ThemeChip(BoxLayout):
-    """Single theme chip button."""
-    theme_name   = StringProperty("Dark Pro")
-    is_selected  = BooleanProperty(False)
-    chip_color   = ColorProperty(get_color_from_hex("#1E1E1E"))
-    text_color   = ColorProperty(get_color_from_hex("#FFFFFF"))
-    border_color = ColorProperty(get_color_from_hex("#333333"))
+    """Selectable theme chip."""
+    label        = StringProperty("Theme")
+    selected     = BooleanProperty(False)
+    chip_bg      = ColorProperty(get_color_from_hex("#1E1E1E"))
+    chip_border  = ColorProperty(get_color_from_hex("#333333"))
+    chip_text    = ColorProperty(get_color_from_hex("#AAAAAA"))
