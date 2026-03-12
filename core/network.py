@@ -1,6 +1,6 @@
 import time, socket, threading, os, glob
 
-# Background ping state
+# ── Background ping ─────────────────────────────────────
 _ping_ms      = None
 _ping_started = False
 
@@ -18,49 +18,79 @@ def _ping_worker():
             _ping_ms = None
         time.sleep(5)
 
-_bw_state = {}
+# ── Bandwidth ────────────────────────────────────────────
+_bw = {}   # {rx, tx, t}
 
 def _read_bytes():
+    """
+    Read from /proc/net/dev — sum ALL non-loopback interfaces.
+    Also tries /sys/class/net/*/statistics/ as fallback.
+    """
     rx = tx = 0
+    found = False
+
     try:
         with open("/proc/net/dev") as f:
             for line in f.readlines()[2:]:
                 p = line.split()
-                if len(p) < 10 or p[0].rstrip(":") == "lo":
+                if len(p) < 10:
+                    continue
+                iface = p[0].rstrip(":")
+                if iface == "lo":
                     continue
                 rx += int(p[1])
                 tx += int(p[9])
+                found = True
     except Exception:
         pass
+
+    # Fallback: /sys/class/net
+    if not found:
+        for iface_path in glob.glob("/sys/class/net/*"):
+            iface = os.path.basename(iface_path)
+            if iface == "lo":
+                continue
+            try:
+                with open(f"{iface_path}/statistics/rx_bytes") as f:
+                    rx += int(f.read().strip())
+                with open(f"{iface_path}/statistics/tx_bytes") as f:
+                    tx += int(f.read().strip())
+            except Exception:
+                continue
+
     return rx, tx
 
 def _fmt(bps):
-    kbps = bps / 1024
+    if bps < 0:
+        bps = 0
+    kbps = bps / 1024.0
     if kbps >= 1024:
         return f"{kbps/1024:.1f} MB/s"
-    if kbps < 0.1:
-        return "0 KB/s"
     return f"{kbps:.1f} KB/s"
 
-def _iface_name():
+def _active_iface():
+    """Return name of the active network interface."""
+    # Check wifi first
     try:
         with open("/proc/net/wireless") as f:
-            lines = f.readlines()
-        for line in lines[2:]:
-            p = line.split()
-            if p:
-                return f"WiFi ({p[0].rstrip(':')})"
+            for line in f.readlines()[2:]:
+                p = line.split()
+                if p:
+                    return f"WiFi ({p[0].rstrip(':')}) "
     except Exception:
         pass
-    # Check active non-lo interfaces
-    for iface_path in glob.glob("/sys/class/net/*"):
+    # Check any active interface
+    for iface_path in sorted(glob.glob("/sys/class/net/*")):
         iface = os.path.basename(iface_path)
         if iface == "lo":
             continue
         try:
-            with open(f"{iface_path}/carrier") as f:
-                if f.read().strip() == "1":
-                    return iface
+            with open(f"{iface_path}/operstate") as f:
+                state = f.read().strip()
+            if state == "up":
+                with open(f"{iface_path}/statistics/rx_bytes") as f:
+                    if int(f.read().strip()) > 0:
+                        return f"{iface}"
         except Exception:
             continue
     return "Mobile"
@@ -74,22 +104,27 @@ def get_network():
 
     rx, tx = _read_bytes()
     now    = time.time()
+    ping_str = f"{_ping_ms} ms" if _ping_ms is not None else "Pinging..."
+    iface    = _active_iface()
 
-    if not _bw_state:
-        _bw_state.update({"rx": rx, "tx": tx, "t": now})
-        return {
-            "dl": "0 KB/s", "ul": "0 KB/s",
-            "ping": "Pinging...", "iface": _iface_name()
-        }
+    if not _bw:
+        _bw.update({"rx": rx, "tx": tx, "t": now})
+        return {"dl": "--", "ul": "--", "ping": ping_str, "iface": iface}
 
-    dt     = max(now - _bw_state["t"], 0.1)
-    dl_bps = (rx - _bw_state["rx"]) / dt
-    ul_bps = (tx - _bw_state["tx"]) / dt
-    _bw_state.update({"rx": rx, "tx": tx, "t": now})
+    dt = now - _bw["t"]
+    if dt < 0.5:
+        # Too fast — return last values if available
+        dl = _bw.get("last_dl", "--")
+        ul = _bw.get("last_ul", "--")
+        return {"dl": dl, "ul": ul, "ping": ping_str, "iface": iface}
 
-    return {
-        "dl":    _fmt(dl_bps),
-        "ul":    _fmt(ul_bps),
-        "ping":  f"{_ping_ms} ms" if _ping_ms is not None else "N/A",
-        "iface": _iface_name()
-    }
+    dl_bps = (rx - _bw["rx"]) / dt
+    ul_bps = (tx - _bw["tx"]) / dt
+
+    dl_str = _fmt(dl_bps)
+    ul_str = _fmt(ul_bps)
+
+    _bw.update({"rx": rx, "tx": tx, "t": now,
+                "last_dl": dl_str, "last_ul": ul_str})
+
+    return {"dl": dl_str, "ul": ul_str, "ping": ping_str, "iface": iface}
