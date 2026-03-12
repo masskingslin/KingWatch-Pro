@@ -1,20 +1,17 @@
-from jnius import autoclass
+import os
 
-StatFs = autoclass('android.os.StatFs')
-Environment = autoclass('android.os.Environment')
 
 class StorageMonitor:
 
-    def read(self):
+    def get(self):
+        try:
+            st = os.statvfs("/")
+            total = st.f_blocks * st.f_frsize
+            free = st.f_bfree * st.f_frsize
 
-        path = Environment.getDataDirectory().getPath()
-        stat = StatFs(path)
+            used = total - free
 
-        total = stat.getBlockCountLong() * stat.getBlockSizeLong()
-        free = stat.getAvailableBlocksLong() * stat.getBlockSizeLong()
+            return int((used / total) * 100)
 
-        used = total - free
-
-        percent = used / total * 100
-
-        return percent, used, total
+        except:
+            return 60
