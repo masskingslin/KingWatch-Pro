@@ -3,14 +3,14 @@ def get_ram():
         mem = {}
         with open("/proc/meminfo") as f:
             for line in f:
-                k, v = line.split()[0].rstrip(":"), int(line.split()[1])
-                mem[k] = v
-        total     = mem.get("MemTotal", 1)
-        available = mem.get("MemAvailable", mem.get("MemFree", 0))
-        used_pct  = round((total - available) / total * 100, 1)
-        used_mb   = round((total - available) / 1024)
-        total_mb  = round(total / 1024)
-        detail    = f"Used: {used_mb} MB / {total_mb} MB"
-        return used_pct, detail
+                p = line.split()
+                if len(p) >= 2:
+                    mem[p[0].rstrip(":")] = int(p[1])
+        total = mem.get("MemTotal", 1)
+        avail = mem.get("MemAvailable", mem.get("MemFree", 0))
+        pct   = round((total - avail) / total * 100, 1)
+        used  = round((total - avail) / 1024)
+        tot   = round(total / 1024)
+        return pct, f"{used} MB / {tot} MB"
     except Exception:
-        return 0.0, ""
+        return 0.0, "N/A"
