@@ -1,7 +1,6 @@
 import os
 import sys
 
-# Android-safe path setup
 app_dir = os.path.dirname(os.path.abspath(__file__))
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
@@ -11,11 +10,12 @@ from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.utils import get_color_from_hex
+from kivy.properties import ColorProperty, StringProperty
 
-# Import widgets (registers InfoCard with KV)
 from ui.widgets import InfoCard  # noqa
 
-# Import core monitors
+from themes import THEME_NAMES, get_theme, DEFAULT_THEME
 from core.cpu import get_cpu
 from core.ram import get_ram
 from core.battery import get_battery
@@ -26,8 +26,35 @@ from core.thermal import get_temp
 
 class RootWidget(BoxLayout):
 
+    # Theme-driven properties — KV binds to these directly
+    bg_color      = ColorProperty(get_color_from_hex("#000000"))
+    card_color    = ColorProperty(get_color_from_hex("#1E1E1E"))
+    text_color    = ColorProperty(get_color_from_hex("#FFFFFF"))
+    accent_color  = ColorProperty(get_color_from_hex("#00C853"))
+    btn_text_color = ColorProperty(get_color_from_hex("#000000"))
+
+    _theme_index = 0
+
+    def on_kv_post(self, base_widget):
+        self._apply_theme(DEFAULT_THEME)
+        self.update_stats()
+        Clock.schedule_interval(self.update_stats, 3)
+
+    def _apply_theme(self, name):
+        t = get_theme(name)
+        self.bg_color       = get_color_from_hex(t["BG"])
+        self.card_color     = get_color_from_hex(t["CARD"])
+        self.text_color     = get_color_from_hex(t["TEXT"])
+        self.accent_color   = get_color_from_hex(t["ACCENT"])
+        self.btn_text_color = get_color_from_hex(t["BTN_TEXT"])
+        self.ids.theme_btn.text = f"Theme: {name}"
+
+    def cycle_theme(self, *args):
+        self._theme_index = (self._theme_index + 1) % len(THEME_NAMES)
+        self._apply_theme(THEME_NAMES[self._theme_index])
+
     def update_stats(self, *args):
-        pairs = [
+        sensors = [
             ("cpu_widget",     get_cpu,     "%"),
             ("ram_widget",     get_ram,     "%"),
             ("battery_widget", get_battery, "%"),
@@ -35,23 +62,21 @@ class RootWidget(BoxLayout):
             ("storage_widget", get_storage, "%"),
             ("temp_widget",    get_temp,    "°C"),
         ]
-        for widget_id, func, unit in pairs:
+        for wid, func, unit in sensors:
             try:
                 val = func()
-                self.ids[widget_id].value = f"{val}{unit}"
+                self.ids[wid].value = f"{val}{unit}"
             except Exception:
-                self.ids[widget_id].value = "N/A"
+                self.ids[wid].value = "N/A"
 
 
 class KingWatchApp(App):
 
     def build(self):
         Window.clearcolor = (0, 0, 0, 1)
-        kv_path = os.path.join(app_dir, "kingwatch.kv")
-        root = Builder.load_file(kv_path)
-        root.update_stats()
-        Clock.schedule_interval(root.update_stats, 3)
-        return root
+        # Load KV rules only — RootWidget() instantiation happens here
+        Builder.load_file(os.path.join(app_dir, "kingwatch.kv"))
+        return RootWidget()
 
 
 if __name__ == "__main__":
