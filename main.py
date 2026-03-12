@@ -45,7 +45,7 @@ class RootWidget(BoxLayout):
         self.update_stats()
         Clock.schedule_interval(self.update_stats, 3)
 
-    # ── THEME ──────────────────────────────────────────────
+    # -- THEME ----------------------------------------------
     def _build_chips(self):
         row = self.ids.chips_row
         row.clear_widgets()
@@ -102,7 +102,7 @@ class RootWidget(BoxLayout):
         except Exception:
             pass
 
-    # ── SENSORS ────────────────────────────────────────────
+    # -- SENSORS --------------------------------------------
     def update_stats(self, *a):
         threading.Thread(target=self._collect_and_update, daemon=True).start()
 
@@ -194,7 +194,7 @@ class RootWidget(BoxLayout):
             c.value     = net["dl"]
             c.subtitle  = net["ping"]
             c.bar_pct   = 0
-            c.detail1   = f"↓ {net['dl']}   ↑ {net['ul']}"
+            c.detail1   = f"v {net['dl']}   ^ {net['ul']}"
             c.detail2   = f"{net['signal']}   {net['ping']}"
             try:
                 ping_val = float(net["ping"].split()[0])
@@ -208,8 +208,8 @@ class RootWidget(BoxLayout):
 
             # Thermal
             c = self.ids.thermal_card
-            c.value     = f"{th_max}°C"
-            c.subtitle  = f"CPU {th_cpu}°C"
+            c.value     = f"{th_max}degC"
+            c.subtitle  = f"CPU {th_cpu}degC"
             bar         = min(th_max / 120.0 * 100, 100)
             c.bar_pct   = bar
             c.arc_color = clr(bar, lo=54, hi=75)
