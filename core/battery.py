@@ -1,15 +1,15 @@
-from jnius import autoclass
+import os
 
-PythonActivity = autoclass('org.kivy.android.PythonActivity')
-BatteryManager = autoclass('android.os.BatteryManager')
 
 class BatteryMonitor:
 
-    def read(self):
+    def get(self):
+        try:
+            path = "/sys/class/power_supply/battery/capacity"
+            if os.path.exists(path):
+                with open(path) as f:
+                    return int(f.read().strip())
+        except:
+            pass
 
-        activity = PythonActivity.mActivity
-        bm = activity.getSystemService(activity.BATTERY_SERVICE)
-
-        level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-
-        return level
+        return 50
