@@ -1,12 +1,35 @@
+
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
+from kivy.clock import Clock
+
+from core.cpu import get_cpu
+from core.ram import get_ram
+from core.battery import get_battery
+from core.network import get_network
+from core.storage import get_storage
+from core.thermal import get_temp
+
 
 class RootWidget(BoxLayout):
-    pass
+
+    def update_stats(self, *args):
+
+        self.ids.cpu_widget.value = f"{get_cpu()}%"
+        self.ids.ram_widget.value = f"{get_ram()}%"
+        self.ids.battery_widget.value = f"{get_battery()}%"
+        self.ids.network_widget.value = get_network()
+        self.ids.storage_widget.value = f"{get_storage()}%"
+        self.ids.temp_widget.value = f"{get_temp()}°C"
+
 
 class KingWatchApp(App):
+
     def build(self):
-        return RootWidget()
+        root = RootWidget()
+        Clock.schedule_interval(root.update_stats, 3)
+        return root
+
 
 if __name__ == "__main__":
     KingWatchApp().run()
