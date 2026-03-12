@@ -1,10 +1,10 @@
-import time, socket, os, glob, threading
+import time, socket, threading, os, glob
 
-_state   = {}
-_ping_ms = None   # updated by background thread
+# Background ping state
+_ping_ms      = None
+_ping_started = False
 
 def _ping_worker():
-    """Runs in background thread — never blocks main thread."""
     global _ping_ms
     while True:
         try:
@@ -16,13 +16,9 @@ def _ping_worker():
             _ping_ms = round((time.time() - t0) * 1000, 1)
         except Exception:
             _ping_ms = None
-        time.sleep(5)   # ping every 5 seconds
+        time.sleep(5)
 
-def _start_ping():
-    th = threading.Thread(target=_ping_worker, daemon=True)
-    th.start()
-
-_ping_started = False
+_bw_state = {}
 
 def _read_bytes():
     rx = tx = 0
@@ -42,42 +38,58 @@ def _fmt(bps):
     kbps = bps / 1024
     if kbps >= 1024:
         return f"{kbps/1024:.1f} MB/s"
+    if kbps < 0.1:
+        return "0 KB/s"
     return f"{kbps:.1f} KB/s"
 
-def _wifi_info():
+def _iface_name():
     try:
         with open("/proc/net/wireless") as f:
             lines = f.readlines()
         for line in lines[2:]:
-            parts = line.split()
-            if len(parts) >= 4:
-                return parts[0].rstrip(":"), parts[2].rstrip(".")
+            p = line.split()
+            if p:
+                return f"WiFi ({p[0].rstrip(':')})"
     except Exception:
         pass
-    return None, None
+    # Check active non-lo interfaces
+    for iface_path in glob.glob("/sys/class/net/*"):
+        iface = os.path.basename(iface_path)
+        if iface == "lo":
+            continue
+        try:
+            with open(f"{iface_path}/carrier") as f:
+                if f.read().strip() == "1":
+                    return iface
+        except Exception:
+            continue
+    return "Mobile"
 
 def get_network():
     global _ping_started
     if not _ping_started:
-        _start_ping()
+        th = threading.Thread(target=_ping_worker, daemon=True)
+        th.start()
         _ping_started = True
 
     rx, tx = _read_bytes()
     now    = time.time()
 
-    if not _state:
-        _state.update({"rx": rx, "tx": tx, "t": now})
-        return "0 KB/s", "0 KB/s", "0 KB/s", "Pinging...", "Detecting..."
+    if not _bw_state:
+        _bw_state.update({"rx": rx, "tx": tx, "t": now})
+        return {
+            "dl": "0 KB/s", "ul": "0 KB/s",
+            "ping": "Pinging...", "iface": _iface_name()
+        }
 
-    dt     = max(now - _state["t"], 0.1)
-    dl_bps = (rx - _state["rx"]) / dt
-    ul_bps = (tx - _state["tx"]) / dt
-    _state.update({"rx": rx, "tx": tx, "t": now})
+    dt     = max(now - _bw_state["t"], 0.1)
+    dl_bps = (rx - _bw_state["rx"]) / dt
+    ul_bps = (tx - _bw_state["tx"]) / dt
+    _bw_state.update({"rx": rx, "tx": tx, "t": now})
 
-    ping_str = f"{_ping_ms} ms" if _ping_ms is not None else "N/A"
-
-    wifi_iface, wifi_link = _wifi_info()
-    signal_str = f"WiFi {wifi_iface}" if wifi_iface else "Mobile/LTE"
-
-    total_str = _fmt(dl_bps + ul_bps)
-    return total_str, _fmt(dl_bps), _fmt(ul_bps), ping_str, signal_str
+    return {
+        "dl":    _fmt(dl_bps),
+        "ul":    _fmt(ul_bps),
+        "ping":  f"{_ping_ms} ms" if _ping_ms is not None else "N/A",
+        "iface": _iface_name()
+    }
