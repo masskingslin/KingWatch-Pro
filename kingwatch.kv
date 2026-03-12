@@ -1,155 +1,331 @@
 #:import get_color_from_hex kivy.utils.get_color_from_hex
 
-#:set BG        "#0A0A0A"
-#:set CARD      "#141414"
-#:set ACCENT    "#00E676"
-#:set TEXT_PRI  "#FFFFFF"
-#:set TEXT_SEC  "#888888"
-#:set DANGER    "#FF1744"
-#:set WARN      "#FF9100"
 
-
-<InfoCard>:
-    orientation: "horizontal"
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  STAT CARD
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<StatCard>:
+    orientation: "vertical"
     size_hint_y: None
-    height: "56dp"
-    padding: [16, 0]
-    spacing: 8
+    height: self.minimum_height
+    padding: [18, 14, 18, 14]
+    spacing: 4
+
     canvas.before:
         Color:
-            rgba: get_color_from_hex(CARD)
+            rgba: root.bg_color
         RoundedRectangle:
-            pos: self.pos
+            pos:  self.pos
             size: self.size
-            radius: [10]
+            radius: [16]
 
+    # Title row
     Label:
-        text: root.icon + "  " + root.title
-        size_hint_x: 0.55
-        color: get_color_from_hex(TEXT_SEC)
-        font_size: "14sp"
+        text: root.title
+        color: root.title_color
+        font_size: "11sp"
         halign: "left"
         valign: "middle"
         text_size: self.size
+        size_hint_y: None
+        height: "18dp"
+
+    # Value + Subtitle row
+    BoxLayout:
+        orientation: "horizontal"
+        size_hint_y: None
+        height: "40dp"
+
+        Label:
+            text: root.value
+            color: root.value_color
+            font_size: "28sp"
+            bold: True
+            halign: "left"
+            valign: "bottom"
+            text_size: self.size
+            size_hint_x: 0.6
+
+        Label:
+            text: root.subtitle
+            color: root.sub_color
+            font_size: "12sp"
+            halign: "right"
+            valign: "bottom"
+            text_size: self.size
+            size_hint_x: 0.4
+
+    # Progress bar — MUST have size_hint_y: None
+    Widget:
+        size_hint_y: None
+        height: "7dp" if root.show_bar else "0dp"
+        opacity: 1 if root.show_bar else 0
+
+        canvas.before:
+            Color:
+                rgba: root.bar_bg
+            RoundedRectangle:
+                pos:  self.pos
+                size: self.width, self.height
+                radius: [4]
+        canvas:
+            Color:
+                rgba: root.bar_color
+            RoundedRectangle:
+                pos:  self.pos
+                size: max(root.bar_pct / 100.0, 0.0) * self.width, self.height
+                radius: [4]
+
+    # Detail line 1
+    Label:
+        text: root.detail1
+        color: root.detail_color
+        font_size: "11sp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+        size_hint_y: None
+        height: "18dp" if root.detail1 else "0dp"
+        opacity: 1 if root.detail1 else 0
+
+    # Detail line 2
+    Label:
+        text: root.detail2
+        color: root.detail_color
+        font_size: "11sp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+        size_hint_y: None
+        height: "18dp" if root.detail2 else "0dp"
+        opacity: 1 if root.detail2 else 0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  THEME CHIP
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<ThemeChip>:
+    size_hint_x: None
+    width: "90dp"
+    size_hint_y: None
+    height: "32dp"
+
+    canvas.before:
+        Color:
+            rgba: root.chip_bg
+        RoundedRectangle:
+            pos:  self.pos
+            size: self.size
+            radius: [16]
+        Color:
+            rgba: root.chip_border
+        Line:
+            rounded_rectangle: self.x+1, self.y+1, self.width-2, self.height-2, 15
+            width: 1.5
 
     Label:
-        text: root.value
-        size_hint_x: 0.45
-        color: get_color_from_hex(ACCENT)
-        font_size: "16sp"
-        bold: True
-        halign: "right"
+        text: root.label
+        color: root.chip_text
+        font_size: "11sp"
+        bold: root.selected
+        halign: "center"
         valign: "middle"
         text_size: self.size
 
 
-RootWidget:
-
-
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ROOT WIDGET  — NO bare RootWidget: instance
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 <RootWidget>:
     orientation: "vertical"
-    padding: [16, 48, 16, 16]
-    spacing: 10
+    spacing: 0
+    padding: 0
+
     canvas.before:
         Color:
-            rgba: get_color_from_hex(BG)
+            rgba: root.bg
         Rectangle:
-            pos: self.pos
+            pos:  self.pos
             size: self.size
+
+    # Status bar spacer
+    Widget:
+        size_hint_y: None
+        height: "36dp"
 
     # Header
     BoxLayout:
         size_hint_y: None
-        height: "60dp"
-        orientation: "horizontal"
+        height: "48dp"
+        padding: [18, 0]
 
         Label:
-            text: "👑 KingWatch Pro"
+            text: "KingWatch Pro"
             font_size: "22sp"
             bold: True
-            color: get_color_from_hex(ACCENT)
+            color: root.accent
             halign: "left"
             valign: "middle"
             text_size: self.size
 
-        Label:
-            text: "LIVE"
-            font_size: "12sp"
-            color: get_color_from_hex("#FF1744")
-            bold: True
+        BoxLayout:
             size_hint_x: None
-            width: "50dp"
-            halign: "right"
-            valign: "middle"
-            text_size: self.size
+            width: "60dp"
+            padding: [0, 16, 0, 16]
+            spacing: 5
+
+            Widget:
+                size_hint_x: None
+                width: "8dp"
+                canvas:
+                    Color:
+                        rgba: get_color_from_hex("#FF1744")
+                    Ellipse:
+                        pos: self.x, self.center_y - 4
+                        size: 8, 8
+
+            Label:
+                text: "LIVE"
+                font_size: "11sp"
+                bold: True
+                color: get_color_from_hex("#FF1744")
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+
+    # Theme label
+    Label:
+        text: "THEME"
+        font_size: "10sp"
+        color: root.dim
+        size_hint_y: None
+        height: "16dp"
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+        padding: [18, 0]
+
+    # Theme chip scrollable strip
+    ScrollView:
+        do_scroll_x: True
+        do_scroll_y: False
+        size_hint_y: None
+        height: "40dp"
+        bar_width: 0
+
+        BoxLayout:
+            id: chips_row
+            orientation: "horizontal"
+            size_hint_x: None
+            width: self.minimum_width
+            spacing: 8
+            padding: [18, 4, 18, 4]
 
     # Divider
-    BoxLayout:
+    Widget:
         size_hint_y: None
         height: "1dp"
-        canvas.before:
+        canvas:
             Color:
-                rgba: get_color_from_hex("#222222")
+                rgba: root.div
             Rectangle:
-                pos: self.pos
-                size: self.size
+                pos:  self.pos
+                size: self.width, 1
 
-    # Cards
-    InfoCard:
-        id: cpu_widget
-        icon: "⚡"
-        title: "CPU Usage"
-        value: "..."
+    # Cards scroll
+    ScrollView:
+        do_scroll_x: False
+        do_scroll_y: True
+        bar_width: "3dp"
+        bar_color: root.accent
+        bar_inactive_color: root.dim
 
-    InfoCard:
-        id: ram_widget
-        icon: "🧠"
-        title: "RAM Usage"
-        value: "..."
+        BoxLayout:
+            orientation: "vertical"
+            size_hint_y: None
+            height: self.minimum_height
+            padding: [12, 12, 12, 12]
+            spacing: 10
 
-    InfoCard:
-        id: battery_widget
-        icon: "🔋"
-        title: "Battery"
-        value: "..."
+            StatCard:
+                id: cpu_card
+                title: "CPU USAGE"
+                show_bar: True
+                bg_color:    root.card
+                title_color: root.dim
+                value_color: root.accent
+                sub_color:   root.dim
+                bar_bg:      root.card2
+                detail_color: root.dim
 
-    InfoCard:
-        id: network_widget
-        icon: "📶"
-        title: "Network"
-        value: "..."
+            StatCard:
+                id: ram_card
+                title: "RAM USAGE"
+                show_bar: True
+                bg_color:    root.card
+                title_color: root.dim
+                value_color: root.accent
+                sub_color:   root.dim
+                bar_bg:      root.card2
+                detail_color: root.dim
 
-    InfoCard:
-        id: storage_widget
-        icon: "💾"
-        title: "Storage"
-        value: "..."
+            StatCard:
+                id: storage_card
+                title: "STORAGE"
+                show_bar: True
+                bg_color:    root.card
+                title_color: root.dim
+                value_color: root.accent
+                sub_color:   root.dim
+                bar_bg:      root.card2
+                detail_color: root.dim
 
-    InfoCard:
-        id: temp_widget
-        icon: "🌡"
-        title: "Temperature"
-        value: "..."
+            StatCard:
+                id: battery_card
+                title: "BATTERY"
+                show_bar: True
+                bg_color:    root.card
+                title_color: root.dim
+                value_color: root.accent
+                sub_color:   root.dim
+                bar_bg:      root.card2
+                detail_color: root.dim
 
-    # Spacer
-    Widget:
-        size_hint_y: 1
+            StatCard:
+                id: network_card
+                title: "NETWORK"
+                bg_color:    root.card
+                title_color: root.dim
+                value_color: root.accent
+                sub_color:   root.dim
+                bar_bg:      root.card2
+                detail_color: root.dim
 
-    # Refresh Button
+            StatCard:
+                id: thermal_card
+                title: "THERMAL"
+                show_bar: True
+                bg_color:    root.card
+                title_color: root.dim
+                value_color: root.accent
+                sub_color:   root.dim
+                bar_bg:      root.card2
+                detail_color: root.dim
+
+    # Refresh button
     Button:
-        text: "↻  Refresh Now"
+        text: "Refresh"
         size_hint_y: None
-        height: "52dp"
+        height: "54dp"
         font_size: "16sp"
         bold: True
         background_normal: ""
-        background_color: get_color_from_hex(ACCENT)
-        color: get_color_from_hex("#000000")
+        background_color: root.accent
+        color: root.btn_txt
         on_press: root.update_stats()
         canvas.before:
             Color:
-                rgba: get_color_from_hex(ACCENT)
-            RoundedRectangle:
-                pos: self.pos
+                rgba: root.accent
+            Rectangle:
+                pos:  self.pos
                 size: self.size
-                radius: [10]
