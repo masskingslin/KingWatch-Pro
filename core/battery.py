@@ -24,50 +24,84 @@ def _fmt_time(mins):
     return f"{h}h {m}m" if h else f"{m}m"
 
 def get_battery():
+    """
+    Returns dict:
+      pct, status, cur_ma, volt_v, power_w, temp_c, eta
+    """
+    result = {
+        "pct": 0.0, "status": "Unknown",
+        "cur": "N/A", "volt": "N/A",
+        "power": "N/A", "temp": "N/A", "eta": "N/A"
+    }
     base = _find_base()
     if not base:
         try:
-            from plyer import battery
-            info = battery.status
+            from plyer import battery as pb
+            info = pb.status
             if info:
-                pct    = float(info.get("percentage", 0))
-                charge = info.get("isCharging", False)
-                status = "Charging" if charge else "Discharging"
-                return pct, status, "N/A", "N/A", "N/A", "N/A", "N/A"
+                result["pct"]    = float(info.get("percentage", 0))
+                result["status"] = "Charging" if info.get("isCharging") else "Discharging"
         except Exception:
             pass
-        return 0.0, "Unknown", "N/A", "N/A", "N/A", "N/A", "N/A"
+        return result
 
     # Capacity
-    cap   = float(_read(base, "capacity") or 0)
+    cap_raw = _read(base, "capacity")
+    if cap_raw:
+        try:
+            result["pct"] = float(cap_raw)
+        except Exception:
+            pass
+
     # Status
-    status = _read(base, "status") or "Unknown"
+    result["status"] = _read(base, "status") or "Unknown"
+
     # Current µA → mA
     cur_raw = _read(base, "current_now")
-    cur_ma  = round(abs(int(cur_raw)) / 1000, 1) if cur_raw else None
-    cur_sign = "+" if "Charg" in status else "-"
-    cur_str  = f"{cur_sign}{cur_ma} mA" if cur_ma else "N/A"
+    cur_ma  = None
+    if cur_raw:
+        try:
+            cur_ma = abs(int(cur_raw)) / 1000.0
+            sign   = "+" if "Charg" in result["status"] else "-"
+            result["cur"] = f"{sign}{cur_ma:.0f} mA"
+        except Exception:
+            pass
+
     # Voltage µV → V
     volt_raw = _read(base, "voltage_now")
-    volt_v   = round(int(volt_raw) / 1_000_000, 2) if volt_raw else None
-    volt_str = f"{volt_v} V" if volt_v else "N/A"
-    # Power = V × I (mW)
-    power_str = "N/A"
+    volt_v   = None
+    if volt_raw:
+        try:
+            volt_v = int(volt_raw) / 1_000_000.0
+            result["volt"] = f"{volt_v:.2f} V"
+        except Exception:
+            pass
+
+    # Power W
     if cur_ma and volt_v:
-        mw = round(cur_ma * volt_v / 1000, 2)
-        power_str = f"{mw} W"
+        pw = cur_ma * volt_v / 1000.0
+        result["power"] = f"{pw:.2f} W"
+
     # Temperature
     temp_raw = _read(base, "temp")
-    temp_c   = round(int(temp_raw) / 10, 1) if temp_raw else None
-    temp_str = f"{temp_c}°C" if temp_c else "N/A"
+    if temp_raw:
+        try:
+            result["temp"] = f"{int(temp_raw)/10.0:.1f}°C"
+        except Exception:
+            pass
+
     # ETA
     full_raw = _read(base, "charge_full") or _read(base, "charge_full_design")
-    eta_str  = "N/A"
     if cur_ma and cur_ma > 0 and full_raw:
-        full_mah = int(full_raw) / 1000
-        if "Charg" in status:
-            eta_str = _fmt_time((100 - cap) / 100 * full_mah / cur_ma * 60)
-        else:
-            eta_str = _fmt_time(cap / 100 * full_mah / cur_ma * 60)
+        try:
+            full_mah = int(full_raw) / 1000.0
+            pct = result["pct"]
+            if "Charg" in result["status"]:
+                eta_min = (100 - pct) / 100 * full_mah / cur_ma * 60
+            else:
+                eta_min = pct / 100 * full_mah / cur_ma * 60
+            result["eta"] = _fmt_time(eta_min)
+        except Exception:
+            pass
 
-    return cap, status, cur_str, volt_str, power_str, temp_str, eta_str
+    return result
