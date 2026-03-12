@@ -1,55 +1,94 @@
-RootWidget:
+#:import get_color_from_hex kivy.utils.get_color_from_hex
 
 <InfoCard>:
     orientation: "horizontal"
     size_hint_y: None
-    height: "40dp"
+    height: "50dp"
+    padding: [10, 5]
+    spacing: 10
+    canvas.before:
+        Color:
+            rgba: get_color_from_hex("#1E1E1E")
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [8]
 
     Label:
         text: root.title
         size_hint_x: 0.6
+        color: get_color_from_hex("#AAAAAA")
+        halign: "left"
+        text_size: self.size
 
     Label:
         text: root.value
         size_hint_x: 0.4
+        color: get_color_from_hex("#00C853")
+        bold: True
+        halign: "right"
+        text_size: self.size
 
+
+RootWidget:
 
 <RootWidget>:
     orientation: "vertical"
-    padding: 20
-    spacing: 20
+    padding: [20, 40, 20, 20]
+    spacing: 15
+    canvas.before:
+        Color:
+            rgba: get_color_from_hex("#000000")
+        Rectangle:
+            pos: self.pos
+            size: self.size
 
     Label:
         text: "KingWatch Pro"
-        font_size: "30sp"
+        font_size: "28sp"
         bold: True
+        color: get_color_from_hex("#00C853")
+        size_hint_y: None
+        height: "50dp"
 
     InfoCard:
         id: cpu_widget
-        title: "CPU Monitor"
+        title: "CPU"
+        value: "0%"
 
     InfoCard:
         id: ram_widget
-        title: "RAM Monitor"
+        title: "RAM"
+        value: "0%"
 
     InfoCard:
         id: battery_widget
-        title: "Battery Monitor"
+        title: "Battery"
+        value: "0%"
 
     InfoCard:
         id: network_widget
-        title: "Network Monitor"
+        title: "Network"
+        value: "..."
 
     InfoCard:
         id: storage_widget
-        title: "Storage Monitor"
+        title: "Storage"
+        value: "0%"
 
     InfoCard:
         id: temp_widget
-        title: "Thermal Monitor"
+        title: "Temp"
+        value: "0°C"
+
+    Widget:
+        size_hint_y: 1
 
     Button:
         text: "Refresh"
         size_hint_y: None
         height: "50dp"
+        background_color: get_color_from_hex("#00C853")
+        color: get_color_from_hex("#000000")
+        bold: True
         on_press: root.update_stats()
