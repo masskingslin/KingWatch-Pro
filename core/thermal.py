@@ -1,24 +1,18 @@
 import os
 
+
 class ThermalMonitor:
 
-    def read(self):
+    def get(self):
 
-        temps = []
+        try:
+            path = "/sys/class/thermal/thermal_zone0/temp"
 
-        base = "/sys/class/thermal"
+            if os.path.exists(path):
+                with open(path) as f:
+                    return int(int(f.read()) / 1000)
 
-        for item in os.listdir(base):
-            if "thermal_zone" in item:
+        except:
+            pass
 
-                try:
-                    with open(f"{base}/{item}/temp") as f:
-                        t = int(f.read().strip())/1000
-                        temps.append(t)
-                except:
-                    pass
-
-        if temps:
-            return max(temps)
-
-        return 0
+        return 35
