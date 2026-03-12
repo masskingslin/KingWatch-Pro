@@ -1,25 +1,21 @@
-#:import get_color_from_hex kivy.utils.get_color_from_hex
+#:import C kivy.utils.get_color_from_hex
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  STAT CARD
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 <StatCard>:
     orientation: "vertical"
     size_hint_y: None
     height: self.minimum_height
-    padding: [18, 14, 18, 14]
-    spacing: 4
+    padding: [16, 12, 16, 12]
+    spacing: 3
 
     canvas.before:
         Color:
             rgba: root.bg_color
         RoundedRectangle:
-            pos:  self.pos
+            pos: self.pos
             size: self.size
-            radius: [16]
+            radius: [14]
 
-    # Title row
     Label:
         text: root.title
         color: root.title_color
@@ -28,23 +24,22 @@
         valign: "middle"
         text_size: self.size
         size_hint_y: None
-        height: "18dp"
+        height: "16dp"
 
-    # Value + Subtitle row
     BoxLayout:
         orientation: "horizontal"
         size_hint_y: None
-        height: "40dp"
+        height: "42dp"
 
         Label:
             text: root.value
             color: root.value_color
-            font_size: "28sp"
+            font_size: "30sp"
             bold: True
             halign: "left"
             valign: "bottom"
             text_size: self.size
-            size_hint_x: 0.6
+            size_hint_x: 0.65
 
         Label:
             text: root.subtitle
@@ -53,30 +48,28 @@
             halign: "right"
             valign: "bottom"
             text_size: self.size
-            size_hint_x: 0.4
+            size_hint_x: 0.35
 
-    # Progress bar — MUST have size_hint_y: None
     Widget:
         size_hint_y: None
-        height: "7dp" if root.show_bar else "0dp"
+        height: "6dp" if root.show_bar else "0dp"
         opacity: 1 if root.show_bar else 0
 
         canvas.before:
             Color:
                 rgba: root.bar_bg
             RoundedRectangle:
-                pos:  self.pos
+                pos: self.pos
                 size: self.width, self.height
-                radius: [4]
+                radius: [3]
         canvas:
             Color:
                 rgba: root.bar_color
             RoundedRectangle:
-                pos:  self.pos
+                pos: self.pos
                 size: max(root.bar_pct / 100.0, 0.0) * self.width, self.height
-                radius: [4]
+                radius: [3]
 
-    # Detail line 1
     Label:
         text: root.detail1
         color: root.detail_color
@@ -85,10 +78,9 @@
         valign: "middle"
         text_size: self.size
         size_hint_y: None
-        height: "18dp" if root.detail1 else "0dp"
+        height: "17dp" if root.detail1 else "0dp"
         opacity: 1 if root.detail1 else 0
 
-    # Detail line 2
     Label:
         text: root.detail2
         color: root.detail_color
@@ -97,31 +89,28 @@
         valign: "middle"
         text_size: self.size
         size_hint_y: None
-        height: "18dp" if root.detail2 else "0dp"
+        height: "17dp" if root.detail2 else "0dp"
         opacity: 1 if root.detail2 else 0
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  THEME CHIP
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 <ThemeChip>:
     size_hint_x: None
-    width: "90dp"
+    width: "88dp"
     size_hint_y: None
-    height: "32dp"
+    height: "30dp"
 
     canvas.before:
         Color:
             rgba: root.chip_bg
         RoundedRectangle:
-            pos:  self.pos
+            pos: self.pos
             size: self.size
-            radius: [16]
+            radius: [15]
         Color:
             rgba: root.chip_border
         Line:
-            rounded_rectangle: self.x+1, self.y+1, self.width-2, self.height-2, 15
-            width: 1.5
+            rounded_rectangle: self.x+1, self.y+1, self.width-2, self.height-2, 14
+            width: 1.4
 
     Label:
         text: root.label
@@ -133,9 +122,6 @@
         text_size: self.size
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ROOT WIDGET  — NO bare RootWidget: instance
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 <RootWidget>:
     orientation: "vertical"
     spacing: 0
@@ -145,19 +131,17 @@
         Color:
             rgba: root.bg
         Rectangle:
-            pos:  self.pos
+            pos: self.pos
             size: self.size
 
-    # Status bar spacer
     Widget:
         size_hint_y: None
         height: "36dp"
 
-    # Header
     BoxLayout:
         size_hint_y: None
         height: "48dp"
-        padding: [18, 0]
+        padding: [16, 0]
 
         Label:
             text: "KingWatch Pro"
@@ -171,15 +155,15 @@
         BoxLayout:
             size_hint_x: None
             width: "60dp"
-            padding: [0, 16, 0, 16]
-            spacing: 5
+            padding: [0, 16]
+            spacing: 4
 
             Widget:
                 size_hint_x: None
                 width: "8dp"
                 canvas:
                     Color:
-                        rgba: get_color_from_hex("#FF1744")
+                        rgba: C("#FF1744")
                     Ellipse:
                         pos: self.x, self.center_y - 4
                         size: 8, 8
@@ -188,29 +172,27 @@
                 text: "LIVE"
                 font_size: "11sp"
                 bold: True
-                color: get_color_from_hex("#FF1744")
+                color: C("#FF1744")
                 halign: "left"
                 valign: "middle"
                 text_size: self.size
 
-    # Theme label
     Label:
         text: "THEME"
         font_size: "10sp"
         color: root.dim
         size_hint_y: None
-        height: "16dp"
+        height: "14dp"
+        padding: [16, 0]
         halign: "left"
         valign: "middle"
         text_size: self.size
-        padding: [18, 0]
 
-    # Theme chip scrollable strip
     ScrollView:
         do_scroll_x: True
         do_scroll_y: False
         size_hint_y: None
-        height: "40dp"
+        height: "38dp"
         bar_width: 0
 
         BoxLayout:
@@ -219,9 +201,8 @@
             size_hint_x: None
             width: self.minimum_width
             spacing: 8
-            padding: [18, 4, 18, 4]
+            padding: [16, 4, 16, 4]
 
-    # Divider
     Widget:
         size_hint_y: None
         height: "1dp"
@@ -229,10 +210,9 @@
             Color:
                 rgba: root.div
             Rectangle:
-                pos:  self.pos
+                pos: self.pos
                 size: self.width, 1
 
-    # Cards scroll
     ScrollView:
         do_scroll_x: False
         do_scroll_y: True
@@ -251,81 +231,63 @@
                 id: cpu_card
                 title: "CPU USAGE"
                 show_bar: True
-                bg_color:    root.card
+                bg_color: root.card
                 title_color: root.dim
                 value_color: root.accent
-                sub_color:   root.dim
-                bar_bg:      root.card2
+                sub_color: root.dim
+                bar_bg: root.card2
                 detail_color: root.dim
 
             StatCard:
                 id: ram_card
-                title: "RAM USAGE"
+                title: "RAM"
                 show_bar: True
-                bg_color:    root.card
+                bg_color: root.card
                 title_color: root.dim
                 value_color: root.accent
-                sub_color:   root.dim
-                bar_bg:      root.card2
+                sub_color: root.dim
+                bar_bg: root.card2
                 detail_color: root.dim
 
             StatCard:
                 id: storage_card
                 title: "STORAGE"
                 show_bar: True
-                bg_color:    root.card
+                bg_color: root.card
                 title_color: root.dim
                 value_color: root.accent
-                sub_color:   root.dim
-                bar_bg:      root.card2
+                sub_color: root.dim
+                bar_bg: root.card2
                 detail_color: root.dim
 
             StatCard:
                 id: battery_card
                 title: "BATTERY"
                 show_bar: True
-                bg_color:    root.card
+                bg_color: root.card
                 title_color: root.dim
                 value_color: root.accent
-                sub_color:   root.dim
-                bar_bg:      root.card2
+                sub_color: root.dim
+                bar_bg: root.card2
                 detail_color: root.dim
 
             StatCard:
                 id: network_card
                 title: "NETWORK"
-                bg_color:    root.card
+                bg_color: root.card
                 title_color: root.dim
                 value_color: root.accent
-                sub_color:   root.dim
-                bar_bg:      root.card2
+                sub_color: root.dim
+                bar_bg: root.card2
                 detail_color: root.dim
 
             StatCard:
                 id: thermal_card
                 title: "THERMAL"
                 show_bar: True
-                bg_color:    root.card
+                bg_color: root.card
                 title_color: root.dim
                 value_color: root.accent
-                sub_color:   root.dim
-                bar_bg:      root.card2
+                sub_color: root.dim
+                bar_bg: root.card2
                 detail_color: root.dim
-
-    # Refresh button
-    Button:
-        text: "Refresh"
-        size_hint_y: None
-        height: "54dp"
-        font_size: "16sp"
-        bold: True
-        background_normal: ""
-        background_color: root.accent
-        color: root.btn_txt
-        on_press: root.update_stats()
-        canvas.before:
-            Color:
-                rgba: root.accent
-            Rectangle:
-                pos:  self.pos
-                size: self.size
