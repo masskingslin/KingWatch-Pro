@@ -4,7 +4,7 @@ _cpu_pct    = 0.0
 _cpu_lock   = threading.Lock()
 _cpu_started = False
 
-# ── Method 1: /proc/stat delta ───────────────────────────
+# -- Method 1: /proc/stat delta ---------------------------
 def _read_stat():
     with open("/proc/stat") as f:
         parts = f.readline().split()[1:]
@@ -13,7 +13,7 @@ def _read_stat():
     total = sum(vals)
     return idle, total
 
-# ── Method 2: freq × cores estimation ───────────────────
+# -- Method 2: freq x cores estimation -------------------
 def _get_all_freqs():
     """Read current freq of every online CPU core."""
     freqs = []
@@ -77,7 +77,7 @@ def _cpu_worker():
         except Exception:
             pass
 
-        # Fallback: freq × cores
+        # Fallback: freq x cores
         try:
             pct = _cpu_via_freq()
             if pct is not None:
