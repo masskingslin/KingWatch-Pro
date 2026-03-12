@@ -1,18 +1,17 @@
-import os
+import glob
 
-
-class ThermalMonitor:
-
-    def get(self):
-
+def get_temp():
+    readings = []
+    for p in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
         try:
-            path = "/sys/class/thermal/thermal_zone0/temp"
-
-            if os.path.exists(path):
-                with open(path) as f:
-                    return int(int(f.read()) / 1000)
-
-        except:
-            pass
-
-        return 35
+            with open(p) as f:
+                v = int(f.read().strip())
+            if v > 1000:
+                v = v / 1000.0
+            if 10 < v < 120:
+                readings.append(v)
+        except Exception:
+            continue
+    if readings:
+        return round(max(readings), 1)
+    return 0.0
