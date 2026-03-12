@@ -1,4 +1,5 @@
 [app]
+
 title = KingWatch Pro
 package.name = kingwatchpro
 package.domain = com.kingwatch
@@ -14,32 +15,24 @@ requirements = python3,kivy==2.3.0,plyer,pillow
 orientation = portrait
 fullscreen = 0
 
-# Safe Android permissions
-android.permissions = INTERNET,ACCESS_NETWORK_STATE,ACCESS_WIFI_STATE,FOREGROUND_SERVICE,RECEIVE_BOOT_COMPLETED,WAKE_LOCK,VIBRATE
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,ACCESS_WIFI_STATE,FOREGROUND_SERVICE,WAKE_LOCK,VIBRATE
 
-# Android SDK versions (Play Protect safe)
 android.api = 33
 android.minapi = 23
+
 android.ndk = 25b
 android.ndk_api = 23
 
-# Architectures
 android.archs = arm64-v8a, armeabi-v7a
 
-# Play Store compatibility
 android.accept_sdk_license = True
 android.enable_androidx = True
 
-# Gradle + Play Protect compatibility
-android.gradle_dependencies = com.android.tools.build:gradle:7.4.2
+android.allow_backup = False
 
-# App behaviour
-android.allow_backup = True
-
-# Metadata
-android.manifest.intent_filters = android.intent.action.MAIN,android.intent.category.LAUNCHER
-
+android.gradle_dependencies = "com.google.android.play:integrity:1.3.0"
 
 [buildozer]
+
 log_level = 2
 warn_on_root = 1
