@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, threading
 
 app_dir = os.path.dirname(os.path.abspath(__file__))
 if app_dir not in sys.path:
@@ -38,8 +38,17 @@ class RootWidget(BoxLayout):
     def on_kv_post(self, *a):
         self._build_chips()
         self._apply_theme(DEFAULT_THEME)
+        # Warm up CPU in background — won't freeze UI
+        threading.Thread(target=self._warmup_cpu, daemon=True).start()
+        # Update all sensors immediately (CPU may show 0 on first call — normal)
         self.update_stats()
+        # Then every 3 seconds
         Clock.schedule_interval(self.update_stats, 3)
+
+    def _warmup_cpu(self):
+        """Pre-warm CPU worker so first real reading is ready fast."""
+        from core.cpu import _ensure_started
+        _ensure_started()
 
     def _build_chips(self):
         row = self.ids.chips_row
@@ -82,6 +91,11 @@ class RootWidget(BoxLayout):
             pass
 
     def update_stats(self, *a):
+        # Run sensor reads in background, update UI when done
+        threading.Thread(target=self._collect_and_update, daemon=True).start()
+
+    def _collect_and_update(self):
+        """Collect all sensor data in background thread, then update UI."""
         t   = get_theme(self._tname)
         acc = t["ACCENT"]
         wrn = t["WARN"]
@@ -92,85 +106,91 @@ class RootWidget(BoxLayout):
             if pct >= lo: return get_color_from_hex(wrn)
             return get_color_from_hex(acc)
 
-        # CPU
-        try:
-            v = float(get_cpu())
+        # ── Collect all data ──────────────────────────────────
+        try:    cpu_v   = float(get_cpu())
+        except: cpu_v   = 0.0
+        cpu_freq   = get_cpu_freq()
+        cpu_cores  = get_cpu_cores()
+        cpu_procs  = get_cpu_procs()
+        cpu_uptime = get_cpu_uptime()
+
+        try:    ram_v, ram_d   = get_ram()
+        except: ram_v, ram_d   = 0.0, "N/A"
+
+        try:    sto_v, sto_d   = get_storage()
+        except: sto_v, sto_d   = 0.0, "N/A"
+
+        try:    bat = get_battery()
+        except: bat = {"pct":0,"status":"ERR","cur":"N/A","volt":"N/A",
+                        "power":"N/A","temp":"N/A","eta":"N/A","eta_label":""}
+
+        try:    net = get_network()
+        except: net = {"dl":"ERR","ul":"ERR","ping":"N/A","signal":"N/A"}
+
+        try:    th_max, th_cpu, th_det = get_thermal()
+        except: th_max, th_cpu, th_det = 0.0, 0.0, "N/A"
+
+        # ── Push to UI on main thread ─────────────────────────
+        def apply(dt):
+            # CPU
             c = self.ids.cpu_card
-            c.value    = f"{v}%"
+            c.value    = f"{cpu_v}%"
             c.subtitle = "usage"
-            c.bar_pct  = v
-            c.bar_color = clr(v)
-            c.detail1  = f"Freq: {get_cpu_freq()}   Cores: {get_cpu_cores()}"
-            c.detail2  = f"Procs: {get_cpu_procs()}   Up: {get_cpu_uptime()}"
-        except Exception:
-            self.ids.cpu_card.value = "ERR"
+            c.bar_pct  = cpu_v
+            c.bar_color = clr(cpu_v)
+            c.detail1  = f"Freq: {cpu_freq}   Cores: {cpu_cores}"
+            c.detail2  = f"Procs: {cpu_procs}   Up: {cpu_uptime}"
 
-        # RAM
-        try:
-            v, detail = get_ram()
+            # RAM
             c = self.ids.ram_card
-            c.value    = f"{v}%"
+            c.value    = f"{ram_v}%"
             c.subtitle = "used"
-            c.bar_pct  = v
-            c.bar_color = clr(v)
-            c.detail1  = detail
-        except Exception:
-            self.ids.ram_card.value = "ERR"
+            c.bar_pct  = ram_v
+            c.bar_color = clr(ram_v)
+            c.detail1  = ram_d
 
-        # Storage
-        try:
-            v, detail = get_storage()
+            # Storage
             c = self.ids.storage_card
-            c.value    = f"{v}%"
+            c.value    = f"{sto_v}%"
             c.subtitle = "used"
-            c.bar_pct  = v
-            c.bar_color = clr(v)
-            c.detail1  = detail
-        except Exception:
-            self.ids.storage_card.value = "ERR"
+            c.bar_pct  = sto_v
+            c.bar_color = clr(sto_v)
+            c.detail1  = sto_d
 
-        # Battery
-        try:
-            b   = get_battery()
-            pct = b["pct"]
+            # Battery
+            pct = bat["pct"]
             c   = self.ids.battery_card
             c.value    = f"{pct:.0f}%"
-            c.subtitle = b["status"]
+            c.subtitle = bat["status"]
             c.bar_pct  = pct
             c.bar_color = (
-                get_color_from_hex(acc) if "Charg" in b["status"]
+                get_color_from_hex(acc) if "Charg" in bat["status"]
                 else get_color_from_hex(dng) if pct <= 10
                 else get_color_from_hex(wrn) if pct <= 20
                 else get_color_from_hex(acc)
             )
-            c.detail1 = f"Curr: {b['cur']}   Volt: {b['volt']}   Pwr: {b['power']}"
-            c.detail2 = f"Temp: {b['temp']}   ETA: {b['eta']}"
-        except Exception:
-            self.ids.battery_card.value = "ERR"
+            c.detail1 = f"Curr: {bat['cur']}   Volt: {bat['volt']}   Pwr: {bat['power']}"
+            # Show ETA with context label: "Until full: 1h 20m" or "Until empty: 5h 30m"
+            eta_label = bat.get("eta_label", "ETA")
+            c.detail2 = f"Temp: {bat['temp']}   {eta_label}: {bat['eta']}"
 
-        # Network
-        try:
-            n = get_network()
+            # Network
             c = self.ids.network_card
-            c.value   = n["dl"]
-            c.subtitle = n["ping"]
-            c.detail1 = f"DL: {n['dl']}   UL: {n['ul']}"
-            c.detail2 = f"Ping: {n['ping']}   {n['iface']}"
-        except Exception:
-            self.ids.network_card.value = "ERR"
+            c.value   = net["dl"]
+            c.subtitle = net["ping"]
+            c.detail1 = f"↓ {net['dl']}   ↑ {net['ul']}"
+            c.detail2 = f"{net['signal']}   Ping: {net['ping']}"
 
-        # Thermal
-        try:
-            max_t, cpu_t, detail = get_thermal()
+            # Thermal
             c = self.ids.thermal_card
-            c.value    = f"{max_t}°C"
-            c.subtitle = f"CPU {cpu_t}°C"
-            bar        = min(max_t / 120.0 * 100, 100)
+            c.value    = f"{th_max}°C"
+            c.subtitle = f"CPU {th_cpu}°C"
+            bar        = min(th_max / 120.0 * 100, 100)
             c.bar_pct  = bar
             c.bar_color = clr(bar, lo=54, hi=75)
-            c.detail1  = detail
-        except Exception:
-            self.ids.thermal_card.value = "ERR"
+            c.detail1  = th_det
+
+        Clock.schedule_once(apply, 0)
 
 
 class MonitorApp(App):
