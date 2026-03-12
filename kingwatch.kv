@@ -1,94 +1,155 @@
 #:import get_color_from_hex kivy.utils.get_color_from_hex
 
+#:set BG        "#0A0A0A"
+#:set CARD      "#141414"
+#:set ACCENT    "#00E676"
+#:set TEXT_PRI  "#FFFFFF"
+#:set TEXT_SEC  "#888888"
+#:set DANGER    "#FF1744"
+#:set WARN      "#FF9100"
+
+
 <InfoCard>:
     orientation: "horizontal"
     size_hint_y: None
-    height: "50dp"
-    padding: [10, 5]
-    spacing: 10
+    height: "56dp"
+    padding: [16, 0]
+    spacing: 8
     canvas.before:
         Color:
-            rgba: get_color_from_hex("#1E1E1E")
+            rgba: get_color_from_hex(CARD)
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [8]
+            radius: [10]
 
     Label:
-        text: root.title
-        size_hint_x: 0.6
-        color: get_color_from_hex("#AAAAAA")
+        text: root.icon + "  " + root.title
+        size_hint_x: 0.55
+        color: get_color_from_hex(TEXT_SEC)
+        font_size: "14sp"
         halign: "left"
+        valign: "middle"
         text_size: self.size
 
     Label:
         text: root.value
-        size_hint_x: 0.4
-        color: get_color_from_hex("#00C853")
+        size_hint_x: 0.45
+        color: get_color_from_hex(ACCENT)
+        font_size: "16sp"
         bold: True
         halign: "right"
+        valign: "middle"
         text_size: self.size
 
 
 RootWidget:
 
+
 <RootWidget>:
     orientation: "vertical"
-    padding: [20, 40, 20, 20]
-    spacing: 15
+    padding: [16, 48, 16, 16]
+    spacing: 10
     canvas.before:
         Color:
-            rgba: get_color_from_hex("#000000")
+            rgba: get_color_from_hex(BG)
         Rectangle:
             pos: self.pos
             size: self.size
 
-    Label:
-        text: "KingWatch Pro"
-        font_size: "28sp"
-        bold: True
-        color: get_color_from_hex("#00C853")
+    # Header
+    BoxLayout:
         size_hint_y: None
-        height: "50dp"
+        height: "60dp"
+        orientation: "horizontal"
 
+        Label:
+            text: "👑 KingWatch Pro"
+            font_size: "22sp"
+            bold: True
+            color: get_color_from_hex(ACCENT)
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: "LIVE"
+            font_size: "12sp"
+            color: get_color_from_hex("#FF1744")
+            bold: True
+            size_hint_x: None
+            width: "50dp"
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+    # Divider
+    BoxLayout:
+        size_hint_y: None
+        height: "1dp"
+        canvas.before:
+            Color:
+                rgba: get_color_from_hex("#222222")
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+    # Cards
     InfoCard:
         id: cpu_widget
-        title: "CPU"
-        value: "0%"
+        icon: "⚡"
+        title: "CPU Usage"
+        value: "..."
 
     InfoCard:
         id: ram_widget
-        title: "RAM"
-        value: "0%"
+        icon: "🧠"
+        title: "RAM Usage"
+        value: "..."
 
     InfoCard:
         id: battery_widget
+        icon: "🔋"
         title: "Battery"
-        value: "0%"
+        value: "..."
 
     InfoCard:
         id: network_widget
+        icon: "📶"
         title: "Network"
         value: "..."
 
     InfoCard:
         id: storage_widget
+        icon: "💾"
         title: "Storage"
-        value: "0%"
+        value: "..."
 
     InfoCard:
         id: temp_widget
-        title: "Temp"
-        value: "0°C"
+        icon: "🌡"
+        title: "Temperature"
+        value: "..."
 
+    # Spacer
     Widget:
         size_hint_y: 1
 
+    # Refresh Button
     Button:
-        text: "Refresh"
+        text: "↻  Refresh Now"
         size_hint_y: None
-        height: "50dp"
-        background_color: get_color_from_hex("#00C853")
-        color: get_color_from_hex("#000000")
+        height: "52dp"
+        font_size: "16sp"
         bold: True
+        background_normal: ""
+        background_color: get_color_from_hex(ACCENT)
+        color: get_color_from_hex("#000000")
         on_press: root.update_stats()
+        canvas.before:
+            Color:
+                rgba: get_color_from_hex(ACCENT)
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [10]
