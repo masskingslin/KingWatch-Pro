@@ -3,8 +3,8 @@ from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 
-# IMPORT UI WIDGETS FIRST
-from ui.widgets import MonitorWidget
+# IMPORT WIDGETS FIRST (important for KV)
+from ui.widgets import CircularGauge, InfoCard
 
 # IMPORT CORE MODULES
 from core.cpu import get_cpu
@@ -19,12 +19,12 @@ class RootWidget(BoxLayout):
 
     def update_stats(self, *args):
 
-        self.ids.cpu_widget.value = f"{get_cpu()}%"
-        self.ids.ram_widget.value = f"{get_ram()}%"
-        self.ids.battery_widget.value = f"{get_battery()}%"
-        self.ids.network_widget.value = get_network()
-        self.ids.storage_widget.value = f"{get_storage()}%"
-        self.ids.temp_widget.value = f"{get_temp()}°C"
+        self.ids.cpu_widget.value = str(get_cpu()) + "%"
+        self.ids.ram_widget.value = str(get_ram()) + "%"
+        self.ids.battery_widget.value = str(get_battery()) + "%"
+        self.ids.network_widget.value = str(get_network())
+        self.ids.storage_widget.value = str(get_storage()) + "%"
+        self.ids.temp_widget.value = str(get_temp()) + "°C"
 
 
 class KingWatchApp(App):
