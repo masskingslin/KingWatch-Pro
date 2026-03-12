@@ -1,3 +1,17 @@
+<MonitorWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "40dp"
+
+    Label:
+        text: root.title
+        size_hint_x: 0.6
+
+    Label:
+        text: root.value
+        size_hint_x: 0.4
+
+
 <RootWidget>:
     orientation: "vertical"
     padding: 20
@@ -5,22 +19,35 @@
 
     Label:
         text: "KingWatch Pro"
-        font_size: "28sp"
+        font_size: "30sp"
         bold: True
 
-    Label:
-        text: "CPU Monitor"
+    MonitorWidget:
+        id: cpu_widget
+        title: "CPU Monitor"
 
-    Label:
-        text: "RAM Monitor"
+    MonitorWidget:
+        id: ram_widget
+        title: "RAM Monitor"
 
-    Label:
-        text: "Battery Monitor"
+    MonitorWidget:
+        id: battery_widget
+        title: "Battery Monitor"
 
-    Label:
-        text: "Network Monitor"
+    MonitorWidget:
+        id: network_widget
+        title: "Network Monitor"
+
+    MonitorWidget:
+        id: storage_widget
+        title: "Storage Monitor"
+
+    MonitorWidget:
+        id: temp_widget
+        title: "Thermal Monitor"
 
     Button:
         text: "Refresh"
         size_hint_y: None
         height: "50dp"
+        on_press: root.update_stats()
