@@ -1,31 +1,36 @@
-import glob, os, time
+import glob, os
 
-def _sysfs_base():
-    for b in ["/sys/class/power_supply/battery",
-              "/sys/class/power_supply/Battery",
-              "/sys/class/power_supply/BAT0",
-              "/sys/class/power_supply/BAT1"]:
-        if os.path.isdir(b):
-            return b
+def _find_all_supply_paths():
+    """Return ALL power supply dirs, battery first."""
+    battery_paths = []
+    other_paths   = []
     for g in glob.glob("/sys/class/power_supply/*"):
-        if os.path.exists(os.path.join(g, "capacity")):
-            try:
-                with open(os.path.join(g, "type")) as f:
-                    if "battery" in f.read().strip().lower():
-                        return g
-            except Exception:
-                return g
-    return None
+        cap = os.path.join(g, "capacity")
+        if not os.path.exists(cap):
+            continue
+        try:
+            with open(os.path.join(g, "type")) as f:
+                t = f.read().strip().lower()
+            if "battery" in t:
+                battery_paths.insert(0, g)
+            else:
+                other_paths.append(g)
+        except Exception:
+            battery_paths.append(g)
+    return battery_paths + other_paths
+
+def _r(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except Exception:
+        return None
 
 def _read(base, *keys):
-    for key in keys:
-        try:
-            with open(os.path.join(base, key)) as f:
-                v = f.read().strip()
-                if v:
-                    return v
-        except Exception:
-            continue
+    for k in keys:
+        v = _r(os.path.join(base, k))
+        if v:
+            return v
     return None
 
 def _fmt_time(mins):
@@ -34,127 +39,150 @@ def _fmt_time(mins):
     h, m = divmod(int(mins), 60)
     return f"{h}h {m:02d}m" if h else f"{m}m"
 
-def _eta_from_current(base, pct, charging):
-    """Calculate ETA using actual current draw from sysfs."""
-    full_raw = _read(base, "charge_full", "charge_full_design")
-    cur_raw  = _read(base, "current_now", "current_avg")
-    if not cur_raw or not full_raw:
-        return None, None
+def _parse_current(raw):
+    """Return mA (positive) from raw string, auto-detecting units."""
+    if not raw:
+        return None
     try:
-        cur_ua  = abs(int(cur_raw))
-        cur_ma  = cur_ua / 1000.0 if cur_ua > 100000 else float(cur_ua)
-        full_mah = int(full_raw) / 1000.0
-        if cur_ma <= 0:
-            return None, cur_ma
-        if charging:
-            mins = (100 - pct) / 100.0 * full_mah / cur_ma * 60
-        else:
-            mins = pct / 100.0 * full_mah / cur_ma * 60
-        return _fmt_time(mins), cur_ma
+        v = abs(int(raw))
+        if v == 0:
+            return None
+        # µA (microamp) — most common on Android
+        if v > 100_000:
+            return v / 1000.0
+        # mA direct
+        if v > 50:
+            return float(v)
+        # Some devices report in A *1000 oddly
+        return float(v)
     except Exception:
-        return None, None
+        return None
 
-def _eta_simple(pct, charging):
-    """Fallback ETA: ~8 min per % (typical phone)."""
-    mins = (100 - pct) * 8 if charging else pct * 8
-    return _fmt_time(mins)
+def _parse_voltage(raw):
+    """Return volts from raw string."""
+    if not raw:
+        return None
+    try:
+        v = int(raw)
+        if v > 1_000_000:
+            return v / 1_000_000.0   # µV
+        if v > 1000:
+            return v / 1000.0        # mV
+        return float(v)
+    except Exception:
+        return None
+
+def _parse_temp(raw):
+    if not raw:
+        return None
+    try:
+        t = int(raw)
+        if abs(t) > 200:
+            return t / 10.0   # tenths of °C
+        return float(t)
+    except Exception:
+        return None
 
 def get_battery():
     result = {
         "pct": 0.0, "status": "Unknown",
         "cur": "N/A", "volt": "N/A",
         "power": "N/A", "temp": "N/A",
-        "eta": "N/A", "eta_label": "Until full" 
+        "eta": "N/A", "eta_label": "ETA"
     }
 
-    base     = _sysfs_base()
     pct      = 0.0
     charging = False
 
-    # ── Capacity + Status ────────────────────────────────────
-    # Try plyer first (most reliable on Android)
+    # ── plyer (Android BatteryManager API) ─────────────────
     try:
         from plyer import battery as pb
         info = pb.status
-        if info:
-            pct      = float(info.get("percentage") or 0)
+        if info and info.get("percentage") is not None:
+            pct      = float(info["percentage"])
             charging = bool(info.get("isCharging"))
             result["pct"]    = pct
             result["status"] = "Charging" if charging else "Discharging"
     except Exception:
-        if base:
-            raw = _read(base, "capacity")
-            if raw:
-                try:
-                    pct = float(raw)
-                    result["pct"] = pct
-                except Exception:
-                    pass
-            status_raw = _read(base, "status")
-            if status_raw:
-                result["status"] = status_raw
-                charging = "Charg" in status_raw
+        pass
 
-    # ETA label changes based on state
+    # ── sysfs paths ─────────────────────────────────────────
+    paths = _find_all_supply_paths()
+    base  = paths[0] if paths else None
+
+    if base and result["pct"] == 0.0:
+        raw = _read(base, "capacity")
+        if raw:
+            try:
+                pct = float(raw)
+                result["pct"] = pct
+            except Exception:
+                pass
+        status_raw = _read(base, "status")
+        if status_raw:
+            result["status"] = status_raw
+            charging = "Charg" in status_raw
+
+    charging = charging or "Charg" in result["status"]
     result["eta_label"] = "Until full" if charging else "Until empty"
 
     if not base:
-        result["eta"] = _eta_simple(pct, charging)
+        # Simple ETA estimate
+        mins = (100 - pct) * 8 if charging else pct * 8
+        result["eta"] = _fmt_time(mins)
         return result
 
-    # ── Current (µA → mA) ────────────────────────────────────
+    # ── Current ─────────────────────────────────────────────
     cur_ma = None
-    cur_raw = _read(base, "current_now", "current_avg")
-    if cur_raw:
-        try:
-            v = abs(int(cur_raw))
-            cur_ma = v / 1000.0 if v > 100000 else float(v)
-            if cur_ma > 0:
-                sign = "+" if charging else "-"
-                result["cur"] = f"{sign}{cur_ma:.0f} mA"
-        except Exception:
-            pass
+    for key in ["current_now", "current_avg", "charge_counter"]:
+        raw = _read(base, key)
+        cur_ma = _parse_current(raw)
+        if cur_ma and cur_ma > 0:
+            sign = "+" if charging else "-"
+            result["cur"] = f"{sign}{cur_ma:.0f} mA"
+            break
 
-    # ── Voltage (µV → V) ─────────────────────────────────────
+    # ── Voltage ─────────────────────────────────────────────
     volt_v = None
-    volt_raw = _read(base, "voltage_now")
-    if volt_raw:
-        try:
-            v = int(volt_raw)
-            volt_v = v / 1_000_000.0 if v > 10000 else v / 1000.0
-            result["volt"] = f"{volt_v:.2f} V"
-        except Exception:
-            pass
+    raw = _read(base, "voltage_now", "voltage_ocv")
+    volt_v = _parse_voltage(raw)
+    if volt_v:
+        result["volt"] = f"{volt_v:.2f} V"
 
-    # ── Power ────────────────────────────────────────────────
-    if cur_ma and volt_v and cur_ma > 0:
+    # ── Power ───────────────────────────────────────────────
+    if cur_ma and volt_v:
         result["power"] = f"{cur_ma * volt_v / 1000:.2f} W"
-
-    # ── Temperature ──────────────────────────────────────────
-    temp_raw = _read(base, "temp")
-    if temp_raw:
-        try:
-            t = int(temp_raw)
-            result["temp"] = f"{t/10.0:.1f}°C" if abs(t) > 100 else f"{float(t):.1f}°C"
-        except Exception:
-            pass
-
-    # ── ETA — precise if current available, else simple ──────
-    if cur_ma and cur_ma > 0:
-        full_raw = _read(base, "charge_full", "charge_full_design")
-        if full_raw:
-            try:
-                full_mah = int(full_raw) / 1000.0
-                if charging:
-                    mins = (100 - pct) / 100.0 * full_mah / cur_ma * 60
-                else:
-                    mins = pct / 100.0 * full_mah / cur_ma * 60
-                result["eta"] = _fmt_time(mins)
-            except Exception:
-                result["eta"] = _eta_simple(pct, charging)
-        else:
-            result["eta"] = _eta_simple(pct, charging)
     else:
-        result["eta"] = _eta_simple(pct, charging)
+        # Try power_now directly
+        raw = _read(base, "power_now")
+        if raw:
+            try:
+                pw = int(raw)
+                result["power"] = f"{pw/1_000_000:.2f} W" if pw > 10000 else f"{float(pw):.2f} W"
+            except Exception:
+                pass
+
+    # ── Temperature ─────────────────────────────────────────
+    raw = _read(base, "temp")
+    t   = _parse_temp(raw)
+    if t:
+        result["temp"] = f"{t:.1f}°C"
+
+    # ── ETA ─────────────────────────────────────────────────
+    full_raw = _read(base, "charge_full", "charge_full_design")
+    if cur_ma and cur_ma > 0 and full_raw:
+        try:
+            full_mah = int(full_raw) / 1000.0
+            if charging:
+                mins = (100 - pct) / 100.0 * full_mah / cur_ma * 60
+            else:
+                mins = pct / 100.0 * full_mah / cur_ma * 60
+            result["eta"] = _fmt_time(mins)
+        except Exception:
+            mins = (100 - pct) * 8 if charging else pct * 8
+            result["eta"] = _fmt_time(mins)
+    else:
+        mins = (100 - pct) * 8 if charging else pct * 8
+        result["eta"] = _fmt_time(mins)
 
     return result
