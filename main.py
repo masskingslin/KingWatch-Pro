@@ -12,7 +12,6 @@ from kivy.core.window import Window
 from kivy.utils import get_color_from_hex
 from kivy.properties import ColorProperty
 
-# Register widget classes with KV
 from ui.widgets import StatCard, ThemeChip  # noqa
 
 from themes import THEME_NAMES, get_theme, DEFAULT_THEME
@@ -39,12 +38,12 @@ class RootWidget(BoxLayout):
     def on_kv_post(self, *a):
         self._build_chips()
         self._apply_theme(DEFAULT_THEME)
-        # Warm up CPU stat (first read returns 0, second is real)
-        get_cpu()
-        Clock.schedule_once(self.update_stats, 1)
+        # First update immediately — cpu.py does its own 0.3s sample
+        self.update_stats()
+        # Then every 3 seconds
         Clock.schedule_interval(self.update_stats, 3)
 
-    # ── THEME ──────────────────────────────────
+    # ── THEME ──────────────────────────────────────────
     def _build_chips(self):
         row = self.ids.chips_row
         row.clear_widgets()
@@ -85,7 +84,7 @@ class RootWidget(BoxLayout):
         except Exception:
             pass
 
-    # ── SENSORS ────────────────────────────────
+    # ── SENSORS ────────────────────────────────────────
     def update_stats(self, *a):
         t   = get_theme(self._tname)
         acc = t["ACCENT"]
@@ -97,7 +96,7 @@ class RootWidget(BoxLayout):
             if pct >= lo: return get_color_from_hex(wrn)
             return get_color_from_hex(acc)
 
-        # CPU
+        # ── CPU ──────────────────────────────────────
         try:
             v = float(get_cpu())
             c = self.ids.cpu_card
@@ -109,7 +108,7 @@ class RootWidget(BoxLayout):
         except Exception:
             self.ids.cpu_card.value = "ERR"
 
-        # RAM
+        # ── RAM ──────────────────────────────────────
         try:
             v, detail = get_ram()
             c = self.ids.ram_card
@@ -121,7 +120,7 @@ class RootWidget(BoxLayout):
         except Exception:
             self.ids.ram_card.value = "ERR"
 
-        # Storage
+        # ── Storage ───────────────────────────────────
         try:
             v, detail = get_storage()
             c = self.ids.storage_card
@@ -133,38 +132,38 @@ class RootWidget(BoxLayout):
         except Exception:
             self.ids.storage_card.value = "ERR"
 
-        # Battery — dict return
+        # ── Battery ───────────────────────────────────
         try:
-            b = get_battery()
+            b   = get_battery()
             pct = b["pct"]
-            c = self.ids.battery_card
+            c   = self.ids.battery_card
             c.value    = f"{pct:.0f}%"
             c.subtitle = b["status"]
             c.bar_pct  = pct
-            # Battery bar: low = danger, charging high = green
-            if "Charg" in b["status"]:
-                c.bar_color = get_color_from_hex(acc)
-            else:
-                c.bar_color = (get_color_from_hex(dng) if pct <= 10
-                               else get_color_from_hex(wrn) if pct <= 20
-                               else get_color_from_hex(acc))
-            c.detail1  = f"Curr: {b['cur']}   Volt: {b['volt']}   Pwr: {b['power']}"
-            c.detail2  = f"Temp: {b['temp']}   ETA: {b['eta']}"
+            c.bar_color = (
+                get_color_from_hex(acc) if "Charg" in b["status"]
+                else get_color_from_hex(dng) if pct <= 10
+                else get_color_from_hex(wrn) if pct <= 20
+                else get_color_from_hex(acc)
+            )
+            c.detail1 = f"Curr: {b['cur']}   Volt: {b['volt']}   Pwr: {b['power']}"
+            c.detail2 = f"Temp: {b['temp']}   ETA: {b['eta']}"
         except Exception:
             self.ids.battery_card.value = "ERR"
 
-        # Network — dict return, auto-refreshes (no button needed)
+        # ── Network ───────────────────────────────────
         try:
             n = get_network()
             c = self.ids.network_card
-            c.value    = n["dl"]
+            # Show DL as main value
+            c.value   = n["dl"] if n["dl"] != "--" else "Measuring..."
             c.subtitle = n["ping"]
-            c.detail1  = f"DL: {n['dl']}   UL: {n['ul']}"
-            c.detail2  = f"Ping: {n['ping']}   {n['iface']}"
+            c.detail1 = f"DL: {n['dl']}   UL: {n['ul']}"
+            c.detail2 = f"Ping: {n['ping']}   {n['iface']}"
         except Exception:
             self.ids.network_card.value = "ERR"
 
-        # Thermal
+        # ── Thermal ───────────────────────────────────
         try:
             max_t, cpu_t, detail = get_thermal()
             c = self.ids.thermal_card
@@ -172,17 +171,16 @@ class RootWidget(BoxLayout):
             c.subtitle = f"CPU {cpu_t}°C"
             bar        = min(max_t / 120.0 * 100, 100)
             c.bar_pct  = bar
-            c.bar_color = clr(bar, lo=54, hi=75)  # 65°C warn, 90°C danger
+            c.bar_color = clr(bar, lo=54, hi=75)
             c.detail1  = detail
         except Exception:
             self.ids.thermal_card.value = "ERR"
 
 
-# ── APP — renamed to MonitorApp to prevent Kivy auto-loading kingwatch.kv ──
+# Named MonitorApp — prevents Kivy auto-loading kingwatch.kv twice
 class MonitorApp(App):
     def build(self):
         Window.clearcolor = (0, 0, 0, 1)
-        # Manual load — no double load since class name != kv file name
         Builder.load_file(os.path.join(app_dir, "kingwatch.kv"))
         return RootWidget()
 
