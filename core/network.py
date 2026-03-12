@@ -1,13 +1,13 @@
 """
-network.py — Android restriction-safe version
+network.py -- Android restriction-safe version
 -----------------------------------------------
 Android 10+ blocks /proc/net/dev and /proc/net/wireless
 TelephonyManager requires READ_PHONE_STATE (dangerous permission, Play flags it)
 
 SAFE alternatives used:
-  - android.net.TrafficStats      → TX/RX bytes (no permission, API 8+)
-  - android.net.ConnectivityManager + NetworkCapabilities → connection type (no permission, API 21+)
-  - No TelephonyManager at all    → avoids READ_PHONE_STATE
+  - android.net.TrafficStats      -> TX/RX bytes (no permission, API 8+)
+  - android.net.ConnectivityManager + NetworkCapabilities -> connection type (no permission, API 21+)
+  - No TelephonyManager at all    -> avoids READ_PHONE_STATE
 """
 
 import time, socket, threading, os, glob
@@ -16,7 +16,7 @@ _ping_ms    = None
 _signal_str = "Detecting..."
 _bg_started = False
 
-# ── Ping worker ──────────────────────────────────────────
+# -- Ping worker ------------------------------------------
 def _ping_worker():
     global _ping_ms
     while True:
@@ -31,7 +31,7 @@ def _ping_worker():
             _ping_ms = None
         time.sleep(5)
 
-# ── Signal worker — NO READ_PHONE_STATE ──────────────────
+# -- Signal worker -- NO READ_PHONE_STATE ------------------
 def _signal_worker():
     global _signal_str
     while True:
@@ -41,9 +41,9 @@ def _signal_worker():
 def _detect_signal_safe():
     """
     Detect connection type WITHOUT READ_PHONE_STATE.
-    Uses ConnectivityManager.NetworkCapabilities — no dangerous permission.
+    Uses ConnectivityManager.NetworkCapabilities -- no dangerous permission.
     """
-    # ── Method 1: ConnectivityManager (API 21+, no permission needed) ───
+    # -- Method 1: ConnectivityManager (API 21+, no permission needed) ---
     try:
         from jnius import autoclass
         Context             = autoclass("android.content.Context")
@@ -66,7 +66,7 @@ def _detect_signal_safe():
         TRANSPORT_ETHERNET  = 3
 
         if caps.hasTransport(TRANSPORT_WIFI):
-            # WiFi — get RSSI from WifiManager (needs ACCESS_WIFI_STATE, already declared)
+            # WiFi -- get RSSI from WifiManager (needs ACCESS_WIFI_STATE, already declared)
             try:
                 WifiManager = autoclass("android.net.wifi.WifiManager")
                 wm   = PythonActivity.mActivity.getSystemService(Context.WIFI_SERVICE)
@@ -87,7 +87,7 @@ def _detect_signal_safe():
                 return "WiFi Connected"
 
         elif caps.hasTransport(TRANSPORT_CELLULAR):
-            # Cellular — detect generation from downlink bandwidth (no permission)
+            # Cellular -- detect generation from downlink bandwidth (no permission)
             try:
                 # API 29+: getLinkDownstreamBandwidthKbps
                 dl_kbps = caps.getLinkDownstreamBandwidthKbps()
@@ -102,7 +102,7 @@ def _detect_signal_safe():
                 else:
                     gen = "Mobile"
                 ul_kbps = caps.getLinkUpstreamBandwidthKbps()
-                return f"{gen} ({dl_kbps//1000}↓/{ul_kbps//1000}↑ Mbps)"
+                return f"{gen} ({dl_kbps//1000}v/{ul_kbps//1000}^ Mbps)"
             except Exception:
                 return "Mobile Data"
 
@@ -114,7 +114,7 @@ def _detect_signal_safe():
     except Exception:
         pass
 
-    # ── Method 2: /proc/net/wireless (works Android 9 and below) ────────
+    # -- Method 2: /proc/net/wireless (works Android 9 and below) --------
     try:
         with open("/proc/net/wireless") as f:
             lines = f.readlines()
@@ -133,7 +133,7 @@ def _detect_signal_safe():
     except Exception:
         pass
 
-    # ── Method 3: sysfs operstate ────────────────────────────────────────
+    # -- Method 3: sysfs operstate ----------------------------------------
     for p in glob.glob("/sys/class/net/wlan*/operstate"):
         try:
             with open(p) as f:
@@ -151,7 +151,7 @@ def _detect_signal_safe():
 
     return "No Network"
 
-# ── Bandwidth — TrafficStats (safe, no permission) ───────
+# -- Bandwidth -- TrafficStats (safe, no permission) -------
 _bw = {}
 
 def _fmt(bps):
@@ -162,7 +162,7 @@ def _fmt(bps):
     return f"{kbps:.1f} KB/s"
 
 def _read_bytes():
-    # Android TrafficStats — no permission, counts ALL app traffic
+    # Android TrafficStats -- no permission, counts ALL app traffic
     try:
         from jnius import autoclass
         ts = autoclass("android.net.TrafficStats")
