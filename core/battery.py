@@ -1,7 +1,7 @@
+# coding: utf-8
 import glob, os
 
 def _find_all_supply_paths():
-    """Return ALL power supply dirs, battery first."""
     battery_paths = []
     other_paths   = []
     for g in glob.glob("/sys/class/power_supply/*"):
@@ -37,49 +37,36 @@ def _fmt_time(mins):
     if not mins or mins <= 0:
         return "N/A"
     h, m = divmod(int(mins), 60)
-    return f"{h}h {m:02d}m" if h else f"{m}m"
+    return "%dh %02dm" % (h, m) if h else "%dm" % m
 
 def _parse_current(raw):
-    """Return mA (positive) from raw string, auto-detecting units."""
+    # Android reports in uA (microamps). Divide by 1000 to get mA.
     if not raw:
         return None
     try:
-        v = abs(int(raw))
-        if v == 0:
+        ua = abs(int(raw))
+        if ua == 0:
             return None
-        # µA (microamp) — most common on Android
-        if v > 100_000:
-            return v / 1000.0
-        # mA direct
-        if v > 50:
-            return float(v)
-        # Some devices report in A *1000 oddly
-        return float(v)
+        return round(ua / 1000.0, 1)
     except Exception:
         return None
 
 def _parse_voltage(raw):
-    """Return volts from raw string."""
+    # Android reports in uV (microvolts). Divide by 1000000 to get V.
     if not raw:
         return None
     try:
-        v = int(raw)
-        if v > 1_000_000:
-            return v / 1_000_000.0   # µV
-        if v > 1000:
-            return v / 1000.0        # mV
-        return float(v)
+        uv = int(raw)
+        return round(uv / 1000000.0, 3)
     except Exception:
         return None
 
 def _parse_temp(raw):
+    # Android reports in tenths of degrees C. Divide by 10.
     if not raw:
         return None
     try:
-        t = int(raw)
-        if abs(t) > 200:
-            return t / 10.0   # tenths of °C
-        return float(t)
+        return round(int(raw) / 10.0, 1)
     except Exception:
         return None
 
@@ -94,7 +81,7 @@ def get_battery():
     pct      = 0.0
     charging = False
 
-    # ── plyer (Android BatteryManager API) ─────────────────
+    # plyer (Android BatteryManager API)
     try:
         from plyer import battery as pb
         info = pb.status
@@ -106,7 +93,7 @@ def get_battery():
     except Exception:
         pass
 
-    # ── sysfs paths ─────────────────────────────────────────
+    # sysfs paths
     paths = _find_all_supply_paths()
     base  = paths[0] if paths else None
 
@@ -127,48 +114,34 @@ def get_battery():
     result["eta_label"] = "Until full" if charging else "Until empty"
 
     if not base:
-        # Simple ETA estimate
         mins = (100 - pct) * 8 if charging else pct * 8
         result["eta"] = _fmt_time(mins)
         return result
 
-    # ── Current ─────────────────────────────────────────────
+    # Current: uA to mA
     cur_ma = None
-    for key in ["current_now", "current_avg", "charge_counter"]:
-        raw = _read(base, key)
-        cur_ma = _parse_current(raw)
+    for key in ["current_now", "current_avg"]:
+        cur_ma = _parse_current(_read(base, key))
         if cur_ma and cur_ma > 0:
             sign = "+" if charging else "-"
-            result["cur"] = f"{sign}{cur_ma:.0f} mA"
+            result["cur"] = "%s%.0f mA" % (sign, cur_ma)
             break
 
-    # ── Voltage ─────────────────────────────────────────────
-    volt_v = None
-    raw = _read(base, "voltage_now", "voltage_ocv")
-    volt_v = _parse_voltage(raw)
+    # Voltage: uV to V
+    volt_v = _parse_voltage(_read(base, "voltage_now", "voltage_ocv"))
     if volt_v:
-        result["volt"] = f"{volt_v:.2f} V"
+        result["volt"] = "%.2f V" % volt_v
 
-    # ── Power ───────────────────────────────────────────────
+    # Power: mA * V / 1000 = W
     if cur_ma and volt_v:
-        result["power"] = f"{cur_ma * volt_v / 1000:.2f} W"
-    else:
-        # Try power_now directly
-        raw = _read(base, "power_now")
-        if raw:
-            try:
-                pw = int(raw)
-                result["power"] = f"{pw/1_000_000:.2f} W" if pw > 10000 else f"{float(pw):.2f} W"
-            except Exception:
-                pass
+        result["power"] = "%.2f W" % (cur_ma * volt_v / 1000.0)
 
-    # ── Temperature ─────────────────────────────────────────
-    raw = _read(base, "temp")
-    t   = _parse_temp(raw)
-    if t:
-        result["temp"] = f"{t:.1f}°C"
+    # Temperature: tenths of C to C
+    temp = _parse_temp(_read(base, "temp"))
+    if temp:
+        result["temp"] = "%.1fC" % temp
 
-    # ── ETA ─────────────────────────────────────────────────
+    # ETA
     full_raw = _read(base, "charge_full", "charge_full_design")
     if cur_ma and cur_ma > 0 and full_raw:
         try:
@@ -179,10 +152,8 @@ def get_battery():
                 mins = pct / 100.0 * full_mah / cur_ma * 60
             result["eta"] = _fmt_time(mins)
         except Exception:
-            mins = (100 - pct) * 8 if charging else pct * 8
-            result["eta"] = _fmt_time(mins)
+            result["eta"] = _fmt_time((100 - pct) * 8 if charging else pct * 8)
     else:
-        mins = (100 - pct) * 8 if charging else pct * 8
-        result["eta"] = _fmt_time(mins)
+        result["eta"] = _fmt_time((100 - pct) * 8 if charging else pct * 8)
 
     return result
