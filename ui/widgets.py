@@ -38,9 +38,10 @@ class CircularGauge(BoxLayout):
         self.add_widget(self.bar)
         self.add_widget(self.value_label)
 
-    def update(self, val):
+        self.bind(value=self.update_value)
 
-        self.value = val
+    def update_value(self, instance, val):
+
         self.bar.value = val
         self.value_label.text = f"{val}%"
 
@@ -72,9 +73,15 @@ class InfoCard(BoxLayout):
         self.add_widget(self.title_label)
         self.add_widget(self.value_label)
 
+        self.bind(title=self.update_title)
+        self.bind(value=self.update_value)
+
     def update_bg(self, *args):
         self.bg.pos = self.pos
         self.bg.size = self.size
 
-    def update(self, val):
-        self.value_label.text = str(val)
+    def update_title(self, instance, value):
+        self.title_label.text = value
+
+    def update_value(self, instance, value):
+        self.value_label.text = value
