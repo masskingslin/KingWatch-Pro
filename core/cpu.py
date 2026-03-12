@@ -4,9 +4,9 @@ def get_cpu():
     global _prev
     try:
         with open("/proc/stat") as f:
-            line = f.readline()
-        vals = [int(x) for x in line.split()[1:]]
-        idle  = vals[3]
+            parts = f.readline().split()[1:]
+        vals  = [int(x) for x in parts]
+        idle  = vals[3] + vals[4]   # idle + iowait
         total = sum(vals)
         if _prev is None:
             _prev = (idle, total)
@@ -16,6 +16,6 @@ def get_cpu():
         _prev = (idle, total)
         if d_total == 0:
             return 0.0
-        return round((1 - d_idle / d_total) * 100, 1)
+        return round((1.0 - d_idle / d_total) * 100, 1)
     except Exception:
         return 0.0
