@@ -12,7 +12,7 @@ source.dir = .
 source.include_exts = py,kv
 source.exclude_dirs = tests,bin,.buildozer,.git,__pycache__,*.egg-info
 
-version = 3.0.0
+version = 1.0.0
 
 # ── Requirements ───────────────────────────
 # NO psutil — pure Android /proc + /sys reads
