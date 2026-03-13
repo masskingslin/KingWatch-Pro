@@ -1,47 +1,222 @@
+import os, sys, threading
+
+app_dir = os.path.dirname(os.path.abspath(__file__))
+if app_dir not in sys.path:
+    sys.path.insert(0, app_dir)
+
 from kivy.app import App
 from kivy.lang import Builder
+from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.utils import get_color_from_hex
+from kivy.properties import ColorProperty
 
-# IMPORTANT: load widgets first
-from ui.widgets import *
-from ui.themes import THEMES
+from ui.widgets import StatCard, ThemeChip  # noqa
 
-# load UI
-KV = Builder.load_file("kingwatch.kv")
+from themes import THEME_NAMES, get_theme, DEFAULT_THEME
+from core.cpu     import get_cpu, get_cpu_freq, get_cpu_cores, get_cpu_procs, get_cpu_uptime
+from core.ram     import get_ram
+from core.battery import get_battery
+from core.network import get_network
+from core.storage import get_storage
+from core.thermal import get_thermal
 
 
-class KingWatchApp(App):
+class RootWidget(BoxLayout):
 
+    bg      = ColorProperty(get_color_from_hex("#0A0A0A"))
+    card    = ColorProperty(get_color_from_hex("#161616"))
+    card2   = ColorProperty(get_color_from_hex("#242424"))
+    accent  = ColorProperty(get_color_from_hex("#00E676"))
+    dim     = ColorProperty(get_color_from_hex("#555555"))
+    div     = ColorProperty(get_color_from_hex("#222222"))
+    btn_txt = ColorProperty(get_color_from_hex("#000000"))
+
+    _tname = DEFAULT_THEME
+
+    def on_kv_post(self, *a):
+        self._build_chips()
+        self._apply_theme(DEFAULT_THEME)
+        threading.Thread(target=self._start_cpu, daemon=True).start()
+        self.update_stats()
+        Clock.schedule_interval(self.update_stats, 3)
+
+    def _start_cpu(self):
+        try:
+            from core.cpu import _ensure_started
+            _ensure_started()
+        except Exception:
+            pass
+
+    def _build_chips(self):
+        row = self.ids.chips_row
+        row.clear_widgets()
+        for name in THEME_NAMES:
+            chip = ThemeChip(label=name)
+            chip._name = name
+            chip.bind(on_touch_up=self._on_chip)
+            row.add_widget(chip)
+
+    def _on_chip(self, chip, touch):
+        if chip.collide_point(*touch.pos):
+            self._apply_theme(chip._name)
+            return True
+
+    def _apply_theme(self, name):
+        self._tname = name
+        t = get_theme(name)
+        self.bg      = get_color_from_hex(t["BG"])
+        self.card    = get_color_from_hex(t["CARD"])
+        self.card2   = get_color_from_hex(t["CARD2"])
+        self.accent  = get_color_from_hex(t["ACCENT"])
+        self.dim     = get_color_from_hex(t["DIM"])
+        self.div     = get_color_from_hex(t["CARD2"])
+        self.btn_txt = get_color_from_hex(t["BTN_TEXT"])
+        self._style_chips(t)
+
+    def _style_chips(self, t):
+        try:
+            for chip in self.ids.chips_row.children:
+                sel = (chip.label == self._tname)
+                chip.selected    = sel
+                chip.chip_bg     = get_color_from_hex(
+                    t["ACCENT"] + "33") if sel else get_color_from_hex(t["CARD"])
+                chip.chip_border = get_color_from_hex(
+                    t["ACCENT"])       if sel else get_color_from_hex(t["CARD2"])
+                chip.chip_text   = get_color_from_hex(
+                    t["ACCENT"])       if sel else get_color_from_hex(t["DIM"])
+        except Exception:
+            pass
+
+    def update_stats(self, *a):
+        threading.Thread(target=self._collect, daemon=True).start()
+
+    def _collect(self):
+        t   = get_theme(self._tname)
+        acc = t["ACCENT"]
+        wrn = t["WARN"]
+        dng = t["DANGER"]
+
+        def clr(pct, lo=75, hi=90):
+            if pct >= hi: return get_color_from_hex(dng)
+            if pct >= lo: return get_color_from_hex(wrn)
+            return get_color_from_hex(acc)
+
+        try:    cpu_v = float(get_cpu())
+        except: cpu_v = 0.0
+        try:    cpu_freq  = get_cpu_freq()
+        except: cpu_freq  = "N/A"
+        try:    cpu_cores = get_cpu_cores()
+        except: cpu_cores = "?"
+        try:    cpu_procs = get_cpu_procs()
+        except: cpu_procs = "?"
+        try:    cpu_up    = get_cpu_uptime()
+        except: cpu_up    = "--"
+
+        try:    ram_v, ram_d = get_ram()
+        except: ram_v, ram_d = 0.0, "N/A"
+
+        try:    sto_v, sto_d = get_storage()
+        except: sto_v, sto_d = 0.0, "N/A"
+
+        try:
+            bat = get_battery()
+        except Exception:
+            bat = {"pct": 0.0, "status": "ERR", "cur": "N/A",
+                   "volt": "N/A", "power": "N/A", "temp": "N/A",
+                   "eta": "N/A", "eta_label": "ETA"}
+
+        try:    net = get_network()
+        except: net = {"dl": "ERR", "ul": "ERR", "ping": "N/A", "signal": "N/A"}
+
+        try:    th_max, th_cpu, th_det = get_thermal()
+        except: th_max, th_cpu, th_det = 0.0, 0.0, "N/A"
+
+        def apply(dt):
+            # CPU
+            try:
+                c = self.ids.cpu_card
+                c.value    = "%.1f%%" % cpu_v
+                c.subtitle = "usage"
+                c.bar_pct  = cpu_v
+                c.bar_color = clr(cpu_v)
+                c.detail1  = "Freq: %s  Cores: %s" % (cpu_freq, cpu_cores)
+                c.detail2  = "Procs: %s  Up: %s" % (cpu_procs, cpu_up)
+            except Exception:
+                pass
+
+            # RAM
+            try:
+                c = self.ids.ram_card
+                c.value    = "%.1f%%" % ram_v
+                c.subtitle = "used"
+                c.bar_pct  = ram_v
+                c.bar_color = clr(ram_v)
+                c.detail1  = ram_d
+            except Exception:
+                pass
+
+            # Storage
+            try:
+                c = self.ids.storage_card
+                c.value    = "%.1f%%" % sto_v
+                c.subtitle = "used"
+                c.bar_pct  = sto_v
+                c.bar_color = clr(sto_v)
+                c.detail1  = sto_d
+            except Exception:
+                pass
+
+            # Battery
+            try:
+                pct = bat["pct"]
+                c   = self.ids.battery_card
+                c.value    = "%.0f%%" % pct
+                c.subtitle = bat["status"]
+                c.bar_pct  = pct
+                c.bar_color = (get_color_from_hex(acc) if "Charg" in bat["status"]
+                               else get_color_from_hex(dng) if pct <= 10
+                               else get_color_from_hex(wrn) if pct <= 20
+                               else get_color_from_hex(acc))
+                c.detail1 = "Curr: %s  Volt: %s  Pwr: %s" % (
+                    bat["cur"], bat["volt"], bat["power"])
+                c.detail2 = "Temp: %s  %s: %s" % (
+                    bat["temp"], bat.get("eta_label", "ETA"), bat["eta"])
+            except Exception:
+                pass
+
+            # Network
+            try:
+                c = self.ids.network_card
+                c.value    = net["dl"]
+                c.subtitle = net["ping"]
+                c.detail1  = "DL: %s  UL: %s" % (net["dl"], net["ul"])
+                c.detail2  = "%s  %s" % (net["signal"], net["ping"])
+            except Exception:
+                pass
+
+            # Thermal
+            try:
+                c   = self.ids.thermal_card
+                bar = min(th_max / 120.0 * 100, 100)
+                c.value    = "%.1f C" % th_max
+                c.subtitle = "CPU %.1f C" % th_cpu
+                c.bar_pct  = bar
+                c.bar_color = clr(bar, lo=54, hi=75)
+                c.detail1  = th_det
+            except Exception:
+                pass
+
+        Clock.schedule_once(apply, 0)
+
+
+class MonitorApp(App):
     def build(self):
-        self.theme = THEMES["dark_pro"]
-
-        Clock.schedule_interval(self.update_stats, 1)
-
-        return KV
-
-    def update_stats(self, dt):
-
-        root = self.root
-
-        # demo values (replace with core later)
-        root.ids.cpu_card.value = "12%"
-        root.ids.cpu_card.percent = 12
-
-        root.ids.ram_card.value = "68%"
-        root.ids.ram_card.percent = 68
-
-        root.ids.storage_card.value = "64%"
-        root.ids.storage_card.percent = 64
-
-        root.ids.battery_card.value = "100%"
-        root.ids.battery_card.percent = 100
-
-        root.ids.network_card.value = "0.5 KB/s"
-        root.ids.network_card.subtitle = "Ping 50 ms"
-
-        root.ids.thermal_card.value = "46°C"
-        root.ids.thermal_card.percent = 46
+        Window.clearcolor = (0, 0, 0, 1)
+        Builder.load_file(os.path.join(app_dir, "kingwatch.kv"))
+        return RootWidget()
 
 
 if __name__ == "__main__":
-    KingWatchApp().run()
+    MonitorApp().run()
