@@ -7,70 +7,81 @@ def _r(path):
     except Exception:
         return None
 
-def _find_battery_base():
-    # Try named battery paths first
-    for name in ["battery", "Battery", "BAT0", "BAT1", "bms", "main-battery"]:
-        p = "/sys/class/power_supply/%s" % name
-        if os.path.exists(os.path.join(p, "capacity")):
-            return p
-    # Scan all and pick one with type=Battery
-    for g in glob.glob("/sys/class/power_supply/*"):
-        t = _r(os.path.join(g, "type")) or ""
-        if "battery" in t.lower() or "Battery" in t:
-            if os.path.exists(os.path.join(g, "capacity")):
-                return g
-    # Fallback: any with capacity
-    for g in glob.glob("/sys/class/power_supply/*"):
-        if os.path.exists(os.path.join(g, "capacity")):
-            return g
-    return None
-
-def _read(base, *keys):
-    for k in keys:
-        v = _r(os.path.join(base, k))
-        if v and v not in ("0", ""):
-            return v
-    return None
-
 def _fmt_time(mins):
     if not mins or mins <= 0:
         return "N/A"
     h, m = divmod(int(mins), 60)
     return "%dh %02dm" % (h, m) if h else "%dm" % m
 
-def _parse_current_ua(raw):
-    # Android kernel reports in uA. Convert to mA.
-    if not raw:
-        return None
+def _get_android_battery():
+    """
+    Use Android BatteryManager Java API directly via jnius.
+    BATTERY_PROPERTY_CURRENT_NOW = microamps (API 21+)
+    EXTRA_VOLTAGE = millivolts
+    EXTRA_TEMPERATURE = tenths of C
+    """
+    result = {}
     try:
-        ua = abs(int(raw))
-        if ua < 100:
-            return None
-        return round(ua / 1000.0, 1)
-    except Exception:
-        return None
+        from jnius import autoclass
+        PythonActivity  = autoclass("org.kivy.android.PythonActivity")
+        Context         = autoclass("android.content.Context")
+        BatteryManager  = autoclass("android.os.BatteryManager")
+        Intent          = autoclass("android.content.Intent")
+        IntentFilter    = autoclass("android.content.IntentFilter")
 
-def _parse_voltage_uv(raw):
-    # Android kernel reports in uV. Convert to V.
-    if not raw:
-        return None
-    try:
-        uv = abs(int(raw))
-        if uv < 1000:
-            return None
-        return round(uv / 1000000.0, 3)
-    except Exception:
-        return None
+        activity = PythonActivity.mActivity
+        bm = activity.getSystemService(Context.BATTERY_SERVICE)
 
-def _parse_temp(raw):
-    # Android kernel reports in tenths of C.
-    if not raw:
-        return None
-    try:
-        t = int(raw)
-        return round(t / 10.0, 1)
+        # Current in microamps (negative = discharging)
+        PROPERTY_CURRENT_NOW = 1
+        cur_ua = bm.getIntProperty(PROPERTY_CURRENT_NOW)
+        if cur_ua != 0 and cur_ua != -2147483648:
+            result["cur_ma"] = abs(cur_ua) / 1000.0
+            result["charging"] = cur_ua > 0
+
+        # Voltage and temperature from sticky broadcast
+        ifilter = IntentFilter("android.intent.action.BATTERY_CHANGED")
+        intent  = activity.registerReceiver(None, ifilter)
+        if intent:
+            volt_mv = intent.getIntExtra("voltage", -1)
+            if volt_mv > 0:
+                result["volt_v"] = volt_mv / 1000.0
+
+            temp_10 = intent.getIntExtra("temperature", -1)
+            if temp_10 > 0:
+                result["temp_c"] = temp_10 / 10.0
+
+            pct = intent.getIntExtra("level", -1)
+            if pct >= 0:
+                result["pct"] = float(pct)
+
+            status = intent.getIntExtra("status", -1)
+            # 2=CHARGING, 3=DISCHARGING, 4=NOT_CHARGING, 5=FULL
+            result["charging"] = status in (2, 5)
+
+        # Capacity in mAh for ETA
+        PROPERTY_CHARGE_COUNTER = 2
+        charge_uah = bm.getIntProperty(PROPERTY_CHARGE_COUNTER)
+        if charge_uah > 0:
+            result["charge_uah"] = charge_uah
+
     except Exception:
-        return None
+        pass
+    return result
+
+
+def _find_battery_base():
+    for name in ["battery", "Battery", "BAT0", "BAT1", "bms", "main-battery"]:
+        p = "/sys/class/power_supply/%s" % name
+        if os.path.exists(os.path.join(p, "capacity")):
+            return p
+    for g in glob.glob("/sys/class/power_supply/*"):
+        t = _r(os.path.join(g, "type")) or ""
+        if "battery" in t.lower():
+            if os.path.exists(os.path.join(g, "capacity")):
+                return g
+    return None
+
 
 def get_battery():
     result = {
@@ -83,7 +94,7 @@ def get_battery():
     pct      = 0.0
     charging = False
 
-    # plyer first (most reliable on Android)
+    # 1. plyer
     try:
         from plyer import battery as pb
         info = pb.status
@@ -95,81 +106,54 @@ def get_battery():
     except Exception:
         pass
 
-    base = _find_battery_base()
+    # 2. Android BatteryManager Java API (most complete)
+    bm = _get_android_battery()
+    if bm.get("pct", 0) > 0 and result["pct"] == 0.0:
+        pct = bm["pct"]
+        result["pct"] = pct
+    if "charging" in bm:
+        charging = bm["charging"]
+        result["status"] = "Charging" if charging else "Discharging"
 
-    # pct fallback from sysfs
-    if result["pct"] == 0.0 and base:
-        raw = _read(base, "capacity")
-        if raw:
-            try:
-                pct = float(raw)
-                result["pct"] = pct
-            except Exception:
-                pass
+    cur_ma = bm.get("cur_ma")
+    if cur_ma and cur_ma > 0:
+        sign = "+" if charging else "-"
+        result["cur"] = "%s%.0f mA" % (sign, cur_ma)
 
-    # status fallback
-    if result["status"] == "Unknown" and base:
-        s = _read(base, "status")
-        if s:
-            result["status"] = s
-            charging = "Charg" in s
+    volt_v = bm.get("volt_v")
+    if volt_v:
+        result["volt"] = "%.2f V" % volt_v
+
+    if cur_ma and volt_v:
+        result["power"] = "%.2f W" % (cur_ma * volt_v / 1000.0)
+
+    if bm.get("temp_c"):
+        result["temp"] = "%.1fC" % bm["temp_c"]
 
     charging = charging or "Charg" in result["status"]
     result["eta_label"] = "Until full" if charging else "Until empty"
 
-    if not base:
-        result["eta"] = _fmt_time((100 - pct) * 8 if charging else pct * 8)
-        return result
-
-    # Current - try every known path name
-    cur_ma = None
-    for key in ["current_now", "current_avg", "batt_current_ua",
-                "ChargerStatus", "BatteryCurrent"]:
-        raw = _r(os.path.join(base, key))
-        cur_ma = _parse_current_ua(raw)
-        if cur_ma:
-            sign = "+" if charging else "-"
-            result["cur"] = "%s%.0f mA" % (sign, cur_ma)
-            break
-
-    # Voltage - try every known path name
-    volt_v = None
-    for key in ["voltage_now", "voltage_ocv", "batt_vol",
-                "BatteryVoltage", "voltage_avg"]:
-        raw = _r(os.path.join(base, key))
-        volt_v = _parse_voltage_uv(raw)
-        if volt_v:
-            result["volt"] = "%.2f V" % volt_v
-            break
-
-    # Power
-    if cur_ma and volt_v:
-        result["power"] = "%.2f W" % (cur_ma * volt_v / 1000.0)
-    else:
-        raw = _r(os.path.join(base, "power_now"))
-        if raw:
-            try:
-                pw = abs(int(raw))
-                result["power"] = "%.2f W" % (pw / 1000000.0)
-            except Exception:
-                pass
-
-    # Temperature
-    for key in ["temp", "batt_temp", "BatteryTemperature"]:
-        t = _parse_temp(_r(os.path.join(base, key)))
-        if t:
-            result["temp"] = "%.1fC" % t
-            break
-
-    # ETA
-    full_raw = _read(base, "charge_full", "charge_full_design", "batt_capacity")
-    if cur_ma and cur_ma > 0 and full_raw:
+    # ETA from charge counter
+    charge_uah = bm.get("charge_uah", 0)
+    if cur_ma and cur_ma > 0 and charge_uah > 0:
         try:
-            full_mah = int(full_raw) / 1000.0
             if charging:
-                mins = (100 - pct) / 100.0 * full_mah / cur_ma * 60
+                # estimate full capacity from sysfs
+                base = _find_battery_base()
+                full_raw = None
+                if base:
+                    for k in ["charge_full", "charge_full_design"]:
+                        v = _r(os.path.join(base, k))
+                        if v and v != "0":
+                            full_raw = v
+                            break
+                if full_raw:
+                    full_mah = int(full_raw) / 1000.0
+                    mins = (full_mah - charge_uah / 1000.0) / cur_ma * 60
+                else:
+                    mins = (100 - pct) * 8
             else:
-                mins = pct / 100.0 * full_mah / cur_ma * 60
+                mins = (charge_uah / 1000.0) / cur_ma * 60
             result["eta"] = _fmt_time(mins)
         except Exception:
             result["eta"] = _fmt_time((100 - pct) * 8 if charging else pct * 8)
