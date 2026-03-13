@@ -1,33 +1,38 @@
 import time
 
-_last = None
+_last_idle = None
+_last_total = None
+
 
 def get_cpu():
-    global _last
+    global _last_idle, _last_total
 
     try:
         with open("/proc/stat") as f:
             line = f.readline().split()[1:]
 
-        vals = list(map(int, line))
-        idle = vals[3]
-        total = sum(vals)
+        values = list(map(int, line))
 
-        if _last is None:
-            _last = (idle, total)
+        idle = values[3]
+        total = sum(values)
+
+        if _last_idle is None:
+            _last_idle = idle
+            _last_total = total
             return 0.0
 
-        idle_prev, total_prev = _last
-        _last = (idle, total)
+        idle_diff = idle - _last_idle
+        total_diff = total - _last_total
 
-        diff_idle = idle - idle_prev
-        diff_total = total - total_prev
+        _last_idle = idle
+        _last_total = total
 
-        if diff_total == 0:
+        if total_diff == 0:
             return 0.0
 
-        cpu = 100 * (1 - diff_idle / diff_total)
+        cpu = 100 * (1 - idle_diff / total_diff)
+
         return round(cpu, 1)
 
-    except:
+    except Exception:
         return 0.0
