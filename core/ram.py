@@ -1,16 +1,16 @@
 def get_ram():
-    with open("/proc/meminfo") as f:
-        meminfo = f.read()
-
-    lines = meminfo.split("\n")
-
-    total = int(lines[0].split()[1])
-    free = int(lines[1].split()[1])
-    buffers = int(lines[3].split()[1])
-    cached = int(lines[4].split()[1])
-
-    used = total - free - buffers - cached
-
-    pct = used / total * 100
-
-    return round(pct,1), used, total
+    try:
+        mem = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                p = line.split()
+                if len(p) >= 2:
+                    mem[p[0].rstrip(":")] = int(p[1])
+        total = mem.get("MemTotal", 1)
+        avail = mem.get("MemAvailable", mem.get("MemFree", 0))
+        pct   = round((total - avail) / total * 100, 1)
+        used  = round((total - avail) / 1024)
+        tot   = round(total / 1024)
+        return pct, f"{used} MB / {tot} MB"
+    except Exception:
+        return 0.0, "N/A"
