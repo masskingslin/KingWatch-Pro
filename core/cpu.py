@@ -1,91 +1,78 @@
-import time, os, threading, glob
+import time
+import os
+import threading
+import glob
 
-_cpu_pct    = 0.0
-_cpu_lock   = threading.Lock()
+_cpu_pct     = 0.0
+_cpu_lock    = threading.Lock()
 _cpu_started = False
 
-# -- Method 1: /proc/stat delta ---------------------------
+
 def _read_stat():
-    with open("/proc/stat") as f:
-        parts = f.readline().split()[1:]
-    vals  = [int(x) for x in parts]
-    idle  = vals[3] + vals[4]
+    with open('/proc/stat') as f:
+        parts = f.readline().split()
+    vals  = [int(x) for x in parts[1:]]
+    idle  = vals[3]
     total = sum(vals)
     return idle, total
 
-# -- Method 2: freq x cores estimation -------------------
+
 def _get_all_freqs():
-    """Read current freq of every online CPU core."""
     freqs = []
     for i in range(32):
-        for fname in ["scaling_cur_freq", "cpuinfo_cur_freq"]:
-            p = f"/sys/devices/system/cpu/cpu{i}/cpufreq/{fname}"
+        base = '/sys/devices/system/cpu/cpu%d/cpufreq/' % i
+        for name in ('scaling_cur_freq', 'cpuinfo_cur_freq'):
             try:
-                with open(p) as f:
-                    freqs.append(int(f.read().strip()))
+                freqs.append(int(open(base + name).read().strip()))
                 break
             except Exception:
-                continue
-        else:
-            break  # no more cores
+                pass
     return freqs
+
 
 def _get_max_freqs():
     maxf = []
     for i in range(32):
-        p = f"/sys/devices/system/cpu/cpu{i}/cpufreq/cpuinfo_max_freq"
+        p = '/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq' % i
         try:
-            with open(p) as f:
-                maxf.append(int(f.read().strip()))
+            maxf.append(int(open(p).read().strip()))
         except Exception:
-            break
+            pass
     return maxf
 
+
 def _cpu_via_freq():
-    """Estimate CPU load as avg(cur_freq / max_freq) across all cores."""
     try:
         cur  = _get_all_freqs()
         maxf = _get_max_freqs()
-        if not cur or not maxf:
-            return None
-        pairs = list(zip(cur, maxf))
-        loads = [c / m * 100 for c, m in pairs if m > 0]
-        if loads:
-            return round(sum(loads) / len(loads), 1)
+        loads = [min(100, max(0, round(c / m * 100, 1)))
+                 for c, m in zip(cur, maxf) if m > 0]
+        return round(sum(loads) / len(loads), 1) if loads else 0.0
     except Exception:
-        pass
-    return None
+        return 0.0
+
 
 def _cpu_worker():
     global _cpu_pct
-    prev = None
-    while True:
-        try:
-            # Try /proc/stat first
-            idle, total = _read_stat()
-            if prev is not None:
-                d_idle  = idle  - prev[0]
-                d_total = total - prev[1]
-                if d_total > 0:
-                    pct = round((1.0 - d_idle / d_total) * 100, 1)
-                    with _cpu_lock:
-                        _cpu_pct = pct
-                    prev = (idle, total)
-                    time.sleep(2)
-                    continue
-            prev = (idle, total)
-        except Exception:
-            pass
+    try:
+        prev_idle, prev_total = _read_stat()
+    except Exception:
+        prev_idle, prev_total = 0, 1
 
-        # Fallback: freq x cores
+    while True:
+        time.sleep(1.0)
         try:
-            pct = _cpu_via_freq()
-            if pct is not None:
-                with _cpu_lock:
-                    _cpu_pct = pct
+            idle, total = _read_stat()
+            d_idle  = idle  - prev_idle
+            d_total = total - prev_total
+            pct = round(100 * (1 - d_idle / d_total), 2) if d_total > 0 else _cpu_via_freq()
+            prev_idle, prev_total = idle, total
+            with _cpu_lock:
+                _cpu_pct = max(0.0, min(100.0, pct))
         except Exception:
-            pass
-        time.sleep(2)
+            with _cpu_lock:
+                _cpu_pct = _cpu_via_freq()
+
 
 def _ensure_started():
     global _cpu_started
@@ -93,59 +80,52 @@ def _ensure_started():
         _cpu_started = True
         threading.Thread(target=_cpu_worker, daemon=True).start()
 
+
 def get_cpu():
     _ensure_started()
     with _cpu_lock:
         return _cpu_pct
 
+
 def get_cpu_freq():
     try:
         freqs = _get_all_freqs()
-        if freqs:
-            max_mhz = max(freqs) // 1000
-            avg_mhz = sum(freqs) // len(freqs) // 1000
-            return f"{max_mhz} MHz"
+        return '%d MHz' % (sum(freqs) // len(freqs) // 1000)
     except Exception:
-        pass
-    return "N/A"
+        return 'N/A'
+
 
 def get_cpu_cores():
-    try:
-        online = []
-        for i in range(32):
-            p = f"/sys/devices/system/cpu/cpu{i}/online"
-            try:
-                with open(p) as f:
-                    if f.read().strip() == "1":
-                        online.append(i)
-            except Exception:
-                break
-        total = os.cpu_count() or 1
-        if online:
-            return f"{len(online)}/{total}"
-        return str(total)
-    except Exception:
-        return str(os.cpu_count() or 1)
+    online = []
+    for i in range(32):
+        p = '/sys/devices/system/cpu/cpu%d/online' % i
+        try:
+            if open(p).read().strip() == '1':
+                online.append(i)
+        except Exception:
+            pass
+    total = os.cpu_count() or len(online) or 1
+    return '%d/%d' % (len(online), total)
+
 
 def get_cpu_procs():
     try:
-        return str(len([d for d in os.listdir("/proc") if d.isdigit()]))
+        return str(len([d for d in os.listdir('/proc') if d.isdigit()]))
     except Exception:
-        return "--"
+        return '--'
+
 
 def get_cpu_uptime():
     try:
-        with open("/proc/uptime") as f:
-            secs = float(f.read().split()[0])
+        secs = float(open('/proc/uptime').read().split()[0])
         h, rem = divmod(int(secs), 3600)
-        return f"{h}h {rem//60:02d}m"
+        return '%dh %02dm' % (h, rem // 60)
     except Exception:
         pass
     try:
         from jnius import autoclass
-        sc = autoclass("android.os.SystemClock")
-        secs = int(sc.elapsedRealtime() / 1000)
-        h, rem = divmod(secs, 3600)
-        return f"{h}h {rem//60:02d}m"
+        ms = autoclass('android.os.SystemClock').elapsedRealtime()
+        h, rem = divmod(ms // 1000, 3600)
+        return '%dh %02dm' % (h, rem // 60)
     except Exception:
-        return "--"
+        return '--'
