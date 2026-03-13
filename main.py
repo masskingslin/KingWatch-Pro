@@ -1,89 +1,47 @@
-#:import CpuWidget ui.widgets.CpuWidget
-#:import RamWidget ui.widgets.RamWidget
-#:import StorageWidget ui.widgets.StorageWidget
-#:import BatteryWidget ui.widgets.BatteryWidget
-#:import NetworkWidget ui.widgets.NetworkWidget
-#:import ThermalWidget ui.widgets.ThermalWidget
+from kivy.app import App
+from kivy.lang import Builder
+from kivy.clock import Clock
+
+# IMPORTANT: load widgets first
+from ui.widgets import *
+from ui.themes import THEMES
+
+# load UI
+KV = Builder.load_file("kingwatch.kv")
 
 
-<StatCard>:
-    orientation: "vertical"
-    padding: 15
-    spacing: 6
-    size_hint_y: None
-    height: 140
+class KingWatchApp(App):
 
-    canvas.before:
-        Color:
-            rgba: .12,.12,.14,1
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [12]
+    def build(self):
+        self.theme = THEMES["dark_pro"]
 
-    Label:
-        text: root.title
-        size_hint_y: None
-        height: 20
-        color: .7,.7,.7,1
+        Clock.schedule_interval(self.update_stats, 1)
 
-    Label:
-        text: root.value
-        font_size: 32
-        bold: True
-        color: 0,1,0.6,1
+        return KV
 
-    ProgressBar:
-        value: root.percent
-        max: 100
+    def update_stats(self, dt):
 
-    Label:
-        text: root.subtitle
-        font_size: 12
-        color: .6,.6,.6,1
+        root = self.root
+
+        # demo values (replace with core later)
+        root.ids.cpu_card.value = "12%"
+        root.ids.cpu_card.percent = 12
+
+        root.ids.ram_card.value = "68%"
+        root.ids.ram_card.percent = 68
+
+        root.ids.storage_card.value = "64%"
+        root.ids.storage_card.percent = 64
+
+        root.ids.battery_card.value = "100%"
+        root.ids.battery_card.percent = 100
+
+        root.ids.network_card.value = "0.5 KB/s"
+        root.ids.network_card.subtitle = "Ping 50 ms"
+
+        root.ids.thermal_card.value = "46°C"
+        root.ids.thermal_card.percent = 46
 
 
-BoxLayout:
-    orientation: "vertical"
-    padding: 10
-    spacing: 10
-
-    Label:
-        text: "KingWatch Pro"
-        font_size: 28
-        size_hint_y: None
-        height: 50
-        bold: True
-        color: 0,1,0.6,1
-
-    ScrollView:
-
-        BoxLayout:
-            orientation: "vertical"
-            spacing: 10
-            size_hint_y: None
-            height: self.minimum_height
-
-            CpuWidget:
-                id: cpu_card
-                title: "CPU USAGE"
-
-            RamWidget:
-                id: ram_card
-                title: "RAM"
-
-            StorageWidget:
-                id: storage_card
-                title: "STORAGE"
-
-            BatteryWidget:
-                id: battery_card
-                title: "BATTERY"
-
-            NetworkWidget:
-                id: network_card
-                title: "NETWORK"
-
-            ThermalWidget:
-                id: thermal_card
-                title: "THERMAL"
+if __name__ == "__main__":
+    KingWatchApp().run()
