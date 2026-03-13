@@ -1,4 +1,4 @@
-import os, sys, threading
+import os, sys, threading, io
 
 app_dir = os.path.dirname(os.path.abspath(__file__))
 if app_dir not in sys.path:
@@ -9,6 +9,7 @@ from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.core.image import Image as CoreImage
 from kivy.utils import get_color_from_hex
 from kivy.properties import ColorProperty
 
@@ -21,6 +22,20 @@ from core.battery import get_battery
 from core.network import get_network
 from core.storage import get_storage
 from core.thermal import get_thermal
+from ui.gauge     import draw_gauge, pct_to_color
+
+
+def _set_gauge(card, pct, color_rgba):
+    """Update the gauge_img texture on a StatCard from main thread."""
+    try:
+        fg  = tuple(int(c * 255) for c in color_rgba[:3]) + (255,)
+        bg  = (40, 40, 40, 255)
+        png = draw_gauge(pct, size=110, fg=fg, bg=bg, thick=12)
+        buf = io.BytesIO(png)
+        ci  = CoreImage(buf, ext="png", nocache=True)
+        card.ids.gauge_img.texture = ci.texture
+    except Exception:
+        pass
 
 
 class RootWidget(BoxLayout):
@@ -137,34 +152,40 @@ class RootWidget(BoxLayout):
             # CPU
             try:
                 c = self.ids.cpu_card
-                c.value    = "%.1f%%" % cpu_v
-                c.subtitle = "usage"
-                c.bar_pct  = cpu_v
-                c.bar_color = clr(cpu_v)
-                c.detail1  = "Freq: %s  Cores: %s" % (cpu_freq, cpu_cores)
-                c.detail2  = "Procs: %s  Up: %s" % (cpu_procs, cpu_up)
+                cc = clr(cpu_v)
+                c.value     = "%.1f%%" % cpu_v
+                c.subtitle  = "usage"
+                c.bar_pct   = cpu_v
+                c.bar_color = cc
+                c.detail1   = "Freq: %s  Cores: %s" % (cpu_freq, cpu_cores)
+                c.detail2   = "Procs: %s  Up: %s" % (cpu_procs, cpu_up)
+                _set_gauge(c, cpu_v, list(cc))
             except Exception:
                 pass
 
             # RAM
             try:
                 c = self.ids.ram_card
-                c.value    = "%.1f%%" % ram_v
-                c.subtitle = "used"
-                c.bar_pct  = ram_v
-                c.bar_color = clr(ram_v)
-                c.detail1  = ram_d
+                cc = clr(ram_v)
+                c.value     = "%.1f%%" % ram_v
+                c.subtitle  = "used"
+                c.bar_pct   = ram_v
+                c.bar_color = cc
+                c.detail1   = ram_d
+                _set_gauge(c, ram_v, list(cc))
             except Exception:
                 pass
 
             # Storage
             try:
                 c = self.ids.storage_card
-                c.value    = "%.1f%%" % sto_v
-                c.subtitle = "used"
-                c.bar_pct  = sto_v
-                c.bar_color = clr(sto_v)
-                c.detail1  = sto_d
+                cc = clr(sto_v)
+                c.value     = "%.1f%%" % sto_v
+                c.subtitle  = "used"
+                c.bar_pct   = sto_v
+                c.bar_color = cc
+                c.detail1   = sto_d
+                _set_gauge(c, sto_v, list(cc))
             except Exception:
                 pass
 
@@ -172,27 +193,41 @@ class RootWidget(BoxLayout):
             try:
                 pct = bat["pct"]
                 c   = self.ids.battery_card
-                c.value    = "%.0f%%" % pct
-                c.subtitle = bat["status"]
-                c.bar_pct  = pct
-                c.bar_color = (get_color_from_hex(acc) if "Charg" in bat["status"]
-                               else get_color_from_hex(dng) if pct <= 10
-                               else get_color_from_hex(wrn) if pct <= 20
-                               else get_color_from_hex(acc))
-                c.detail1 = "Curr: %s  Volt: %s  Pwr: %s" % (
+                bat_clr = (get_color_from_hex(acc) if "Charg" in bat["status"]
+                           else get_color_from_hex(dng) if pct <= 10
+                           else get_color_from_hex(wrn) if pct <= 20
+                           else get_color_from_hex(acc))
+                c.value     = "%.0f%%" % pct
+                c.subtitle  = bat["status"]
+                c.bar_pct   = pct
+                c.bar_color = bat_clr
+                c.detail1   = "Curr: %s  Volt: %s  Pwr: %s" % (
                     bat["cur"], bat["volt"], bat["power"])
-                c.detail2 = "Temp: %s  %s: %s" % (
+                c.detail2   = "Temp: %s  %s: %s" % (
                     bat["temp"], bat.get("eta_label", "ETA"), bat["eta"])
+                _set_gauge(c, pct, list(bat_clr))
             except Exception:
                 pass
 
             # Network
             try:
                 c = self.ids.network_card
+                cc = get_color_from_hex(acc)
+                try:
+                    ping_val = float(net["ping"].split()[0])
+                    bar_pct  = min(ping_val / 5.0, 100)
+                    cc = (get_color_from_hex(dng) if ping_val > 200
+                          else get_color_from_hex(wrn) if ping_val > 80
+                          else get_color_from_hex(acc))
+                except Exception:
+                    bar_pct = 0
                 c.value    = net["dl"]
                 c.subtitle = net["ping"]
+                c.bar_pct  = bar_pct
+                c.bar_color = cc
                 c.detail1  = "DL: %s  UL: %s" % (net["dl"], net["ul"])
                 c.detail2  = "%s  %s" % (net["signal"], net["ping"])
+                _set_gauge(c, bar_pct, list(cc))
             except Exception:
                 pass
 
@@ -200,11 +235,13 @@ class RootWidget(BoxLayout):
             try:
                 c   = self.ids.thermal_card
                 bar = min(th_max / 120.0 * 100, 100)
+                cc  = clr(bar, lo=54, hi=75)
                 c.value    = "%.1f C" % th_max
                 c.subtitle = "CPU %.1f C" % th_cpu
                 c.bar_pct  = bar
-                c.bar_color = clr(bar, lo=54, hi=75)
+                c.bar_color = cc
                 c.detail1  = th_det
+                _set_gauge(c, bar, list(cc))
             except Exception:
                 pass
 
