@@ -13,6 +13,7 @@ class StatCard(BoxLayout):
     detail1      = StringProperty("")
     detail2      = StringProperty("")
     bar_pct      = NumericProperty(0)
+    show_bar     = BooleanProperty(True)
     bg_color     = ColorProperty(get_color_from_hex("#161616"))
     title_color  = ColorProperty(get_color_from_hex("#555555"))
     value_color  = ColorProperty(get_color_from_hex("#00E676"))
