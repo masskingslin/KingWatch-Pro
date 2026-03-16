@@ -6,6 +6,7 @@ from kivy.properties import ColorProperty
 from kivy.utils import get_color_from_hex
 
 from ui.theme import get_theme
+
 from core.cpu import get_cpu
 from core.ram import get_ram
 from core.storage import get_storage
@@ -50,6 +51,8 @@ class RootWidget(BoxLayout):
 
         fps = self.fps_monitor.get_fps()
         refresh = self.fps_monitor.get_refresh_rate()
+
+        refresh = max(refresh, 60)
 
         self.ids.cpu_card.value = f"{cpu['usage']:.1f}%"
         self.ids.cpu_card.bar_pct = cpu["usage"]
