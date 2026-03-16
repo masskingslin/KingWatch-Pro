@@ -1,90 +1,66 @@
 from kivy.app import App
-from kivy.lang import Builder
 from kivy.clock import Clock
+from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import ColorProperty
-from kivy.utils import get_color_from_hex
 
-from theme import get_theme
-
+from core.fps import PerformanceMonitor
 from core.cpu import get_cpu
 from core.ram import get_ram
-from core.storage import get_storage
 from core.battery import get_battery
 from core.network import get_network
+from core.storage import get_storage
 from core.thermal import get_thermal
-from core.fps import FPSMonitor
+
+KV = Builder.load_file("kingwatch.kv")
 
 
-class RootWidget(BoxLayout):
-
-    bg = ColorProperty([0,0,0,1])
-    card = ColorProperty([0,0,0,1])
-    card2 = ColorProperty([0,0,0,1])
-    dim = ColorProperty([0.5,0.5,0.5,1])
-    accent = ColorProperty([0,1,0,1])
-
-    def start(self):
-
-        theme = get_theme()
-
-        self.bg = get_color_from_hex(theme["BG"])
-        self.card = get_color_from_hex(theme["CARD"])
-        self.card2 = get_color_from_hex(theme["CARD2"])
-        self.dim = get_color_from_hex(theme["DIM"])
-        self.accent = get_color_from_hex(theme["ACCENT"])
-
-        self.fps_monitor = FPSMonitor()
-
-        Clock.schedule_interval(self.update_stats, 2)
-
-    def update_stats(self, dt):
-
-        try:
-
-            cpu = get_cpu()
-            ram = get_ram()
-            storage = get_storage()
-            battery = get_battery()
-            network = get_network()
-            thermal = get_thermal()
-
-            fps = self.fps_monitor.get_fps()
-            refresh = max(self.fps_monitor.get_refresh_rate(), 60)
-
-            self.ids.cpu_card.value = f"{cpu['usage']:.1f}%"
-            self.ids.cpu_card.bar_pct = cpu["usage"]
-
-            self.ids.ram_card.value = f"{ram['pct']:.1f}%"
-            self.ids.ram_card.bar_pct = ram["pct"]
-
-            self.ids.storage_card.value = f"{storage['pct']:.1f}%"
-            self.ids.storage_card.bar_pct = storage["pct"]
-
-            self.ids.battery_card.value = f"{battery['pct']}%"
-            self.ids.battery_card.bar_pct = battery["pct"]
-
-            self.ids.network_card.value = network["dl"]
-            self.ids.network_card.subtitle = network["ping"]
-
-            self.ids.thermal_card.value = f"{thermal['max']}°C"
-            self.ids.thermal_card.bar_pct = thermal["max"]
-
-            self.ids.fps_card.value = str(fps)
-            self.ids.fps_card.subtitle = f"{refresh} Hz"
-            self.ids.fps_card.bar_pct = min((fps / refresh) * 100, 100)
-
-        except Exception as e:
-            print("monitor error:", e)
+class Root(BoxLayout):
+    pass
 
 
 class KingWatchApp(App):
 
     def build(self):
+        self.monitor = PerformanceMonitor()
+        self.root = Root()
 
-        root = Builder.load_file("kingwatch.kv")
-        root.start()
-        return root
+        Clock.schedule_interval(self.update_stats, 1)
+
+        return self.root
+
+    def update_stats(self, dt):
+
+        fps = self.monitor.get_fps()
+        gpu = self.monitor.get_gpu()
+
+        cpu = get_cpu()
+        ram_pct, ram_str = get_ram()
+
+        batt = get_battery()
+
+        net = get_network()
+
+        storage = get_storage()
+
+        therm = get_thermal()
+
+        r = self.root
+
+        r.ids.fps_value.text = str(fps)
+        r.ids.gpu_value.text = gpu
+
+        r.ids.cpu_value.text = cpu
+        r.ids.ram_value.text = ram_str
+
+        r.ids.battery_value.text = batt["percent"]
+        r.ids.battery_detail.text = batt["detail"]
+
+        r.ids.net_value.text = net["dl"]
+        r.ids.net_detail.text = f'{net["ul"]} {net["ping"]}'
+
+        r.ids.storage_value.text = storage
+
+        r.ids.temp_value.text = str(therm[0])
 
 
 if __name__ == "__main__":
