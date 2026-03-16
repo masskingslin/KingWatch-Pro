@@ -1,44 +1,82 @@
 import time
+import socket
+import threading
 
-prev=None
+_ping_ms = None
+_signal = "Detecting..."
+_started = False
 
-def read_bytes():
 
-    rx=0
-    tx=0
+def _ping_worker():
+    global _ping_ms
+    while True:
+        try:
+            s = socket.socket()
+            s.settimeout(2)
+            t0 = time.time()
+            s.connect(("8.8.8.8", 53))
+            s.close()
+            _ping_ms = round((time.time() - t0) * 1000, 1)
+        except Exception:
+            _ping_ms = None
+        time.sleep(5)
 
-    with open("/proc/net/dev") as f:
-        for line in f.readlines()[2:]:
-            parts=line.split()
-            rx+=int(parts[1])
-            tx+=int(parts[9])
 
-    return rx,tx
+def _detect_connection():
+    try:
+        from jnius import autoclass
+
+        Context = autoclass("android.content.Context")
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        ConnectivityManager = autoclass("android.net.ConnectivityManager")
+
+        cm = PythonActivity.mActivity.getSystemService(
+            Context.CONNECTIVITY_SERVICE
+        )
+
+        net = cm.getActiveNetwork()
+        if net is None:
+            return "No Network"
+
+        caps = cm.getNetworkCapabilities(net)
+
+        if caps.hasTransport(1):
+            return "WiFi"
+        if caps.hasTransport(0):
+            return "Mobile"
+        if caps.hasTransport(3):
+            return "Ethernet"
+
+        return "Connected"
+
+    except Exception:
+        return "Unknown"
 
 
 def get_network():
+    global _started, _signal
 
-    global prev
+    if not _started:
+        _started = True
+        threading.Thread(target=_ping_worker, daemon=True).start()
 
-    now=time.time()
-    rx,tx=read_bytes()
+    try:
+        from jnius import autoclass
 
-    if prev is None:
-        prev=(rx,tx,now)
-        return {"dl":"0 KB/s","ul":"0 KB/s","ping":"--","signal":"LTE","pct":0}
+        ts = autoclass("android.net.TrafficStats")
+        rx = ts.getTotalRxBytes()
+        tx = ts.getTotalTxBytes()
 
-    rx0,tx0,t0=prev
-    dt=now-t0
+    except Exception:
+        rx = tx = 0
 
-    dl=(rx-rx0)/dt/1024
-    ul=(tx-tx0)/dt/1024
+    _signal = _detect_connection()
 
-    prev=(rx,tx,now)
+    ping = f"{_ping_ms} ms" if _ping_ms else "Pinging..."
 
     return {
-        "dl":f"{dl:.1f} KB/s",
-        "ul":f"{ul:.1f} KB/s",
-        "ping":"--",
-        "signal":"LTE",
-        "pct":min(dl/200*100,100)
+        "dl": str(rx),
+        "ul": str(tx),
+        "ping": ping,
+        "signal": _signal,
     }
