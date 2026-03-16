@@ -24,7 +24,7 @@ class RootWidget(BoxLayout):
     dim = ColorProperty([0.5,0.5,0.5,1])
     accent = ColorProperty([0,1,0,1])
 
-    def on_kv_post(self, base):
+    def start_monitor(self):
 
         theme = get_theme()
 
@@ -80,7 +80,10 @@ class RootWidget(BoxLayout):
 class KingWatchApp(App):
 
     def build(self):
-        return Builder.load_file("kingwatch.kv")
+
+        root = Builder.load_file("kingwatch.kv")
+        root.start_monitor()
+        return root
 
 
 if __name__ == "__main__":
