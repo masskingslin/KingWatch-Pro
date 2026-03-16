@@ -1,15 +1,17 @@
-import shutil
-
+import os
 
 def get_storage():
 
-    total, used, free = shutil.disk_usage("/")
+    s=os.statvfs("/")
 
-    pct = used / total * 100
+    total=s.f_blocks*s.f_frsize
+    free=s.f_bavail*s.f_frsize
+    used=total-free
 
-    total_gb = total / (1024**3)
-    used_gb = used / (1024**3)
+    pct=(used/total)*100
 
-    detail = f"{used_gb:.1f} GB / {total_gb:.1f} GB"
-
-    return pct, detail
+    return {
+        "pct":pct,
+        "used":f"{used//(1024**3)} GB",
+        "total":f"{total//(1024**3)} GB"
+    }
