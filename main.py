@@ -4,24 +4,21 @@ import threading
 import io
 
 app_dir = os.path.dirname(os.path.abspath(__file__))
-
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
 from kivy.app import App
 from kivy.lang import Builder
-from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
+from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.core.image import Image as CoreImage
-from kivy.properties import ColorProperty
 from kivy.utils import get_color_from_hex
+from kivy.properties import ColorProperty
 
 from ui.widgets import StatCard, ThemeChip
-from ui.gauge import draw_gauge
 
 from themes import THEME_NAMES, get_theme, DEFAULT_THEME
-
 from core.cpu import get_cpu, get_cpu_freq, get_cpu_cores, get_cpu_procs, get_cpu_uptime
 from core.ram import get_ram
 from core.battery import get_battery
@@ -30,21 +27,21 @@ from core.storage import get_storage
 from core.thermal import get_thermal
 from core.fps import FPSMonitor
 
+from ui.gauge import draw_gauge
 
-def set_gauge(card, pct, color):
 
+def _set_gauge(card, pct, color_rgba):
     try:
-        fg = tuple(int(c * 255) for c in color[:3]) + (255,)
+        fg = tuple(int(c * 255) for c in color_rgba[:3]) + (255,)
         bg = (40, 40, 40, 255)
 
         png = draw_gauge(pct, size=110, fg=fg, bg=bg, thick=12)
 
         buf = io.BytesIO(png)
 
-        img = CoreImage(buf, ext="png", nocache=True)
+        ci = CoreImage(buf, ext="png", nocache=True)
 
-        card.ids.gauge_img.texture = img.texture
-
+        card.ids.gauge_img.texture = ci.texture
     except Exception:
         pass
 
@@ -59,57 +56,46 @@ class RootWidget(BoxLayout):
     div = ColorProperty(get_color_from_hex("#222222"))
     btn_txt = ColorProperty(get_color_from_hex("#000000"))
 
-    _theme_name = DEFAULT_THEME
+    _tname = DEFAULT_THEME
 
-    def on_kv_post(self, *args):
+    def on_kv_post(self, *a):
 
         self.perf = FPSMonitor()
 
-        self.build_theme_chips()
+        self._build_chips()
 
-        self.apply_theme(DEFAULT_THEME)
+        self._apply_theme(DEFAULT_THEME)
 
-        threading.Thread(target=self.start_cpu_monitor, daemon=True).start()
+        threading.Thread(target=self._start_cpu, daemon=True).start()
 
         self.update_stats()
 
         Clock.schedule_interval(self.update_stats, 3)
 
-    def start_cpu_monitor(self):
-
+    def _start_cpu(self):
         try:
             from core.cpu import _ensure_started
             _ensure_started()
-        except:
+        except Exception:
             pass
 
-    def build_theme_chips(self):
-
+    def _build_chips(self):
         row = self.ids.chips_row
         row.clear_widgets()
 
         for name in THEME_NAMES:
-
             chip = ThemeChip(label=name)
-
             chip._name = name
-
-            chip.bind(on_touch_up=self.select_theme)
-
+            chip.bind(on_touch_up=self._on_chip)
             row.add_widget(chip)
 
-    def select_theme(self, chip, touch):
-
+    def _on_chip(self, chip, touch):
         if chip.collide_point(*touch.pos):
-
-            self.apply_theme(chip._name)
-
+            self._apply_theme(chip._name)
             return True
 
-    def apply_theme(self, name):
-
-        self._theme_name = name
-
+    def _apply_theme(self, name):
+        self._tname = name
         t = get_theme(name)
 
         self.bg = get_color_from_hex(t["BG"])
@@ -120,66 +106,68 @@ class RootWidget(BoxLayout):
         self.div = get_color_from_hex(t["CARD2"])
         self.btn_txt = get_color_from_hex(t["BTN_TEXT"])
 
-        self.style_chips(t)
+        self._style_chips(t)
 
-    def style_chips(self, theme):
-
+    def _style_chips(self, t):
         try:
-
             for chip in self.ids.chips_row.children:
 
-                selected = chip.label == self._theme_name
+                sel = chip.label == self._tname
 
-                chip.selected = selected
+                chip.selected = sel
 
                 chip.chip_bg = get_color_from_hex(
-                    theme["ACCENT"] + "33") if selected else get_color_from_hex(theme["CARD"])
+                    t["ACCENT"] + "33") if sel else get_color_from_hex(t["CARD"])
 
                 chip.chip_border = get_color_from_hex(
-                    theme["ACCENT"]) if selected else get_color_from_hex(theme["CARD2"])
+                    t["ACCENT"]) if sel else get_color_from_hex(t["CARD2"])
 
                 chip.chip_text = get_color_from_hex(
-                    theme["ACCENT"]) if selected else get_color_from_hex(theme["DIM"])
-
-        except:
+                    t["ACCENT"]) if sel else get_color_from_hex(t["DIM"])
+        except Exception:
             pass
 
-    def update_stats(self, *args):
+    def update_stats(self, *a):
+        threading.Thread(target=self._collect, daemon=True).start()
 
-        threading.Thread(target=self.collect_stats, daemon=True).start()
+    def _collect(self):
 
-    def collect_stats(self):
+        t = get_theme(self._tname)
 
-        theme = get_theme(self._theme_name)
+        acc = t["ACCENT"]
+        wrn = t["WARN"]
+        dng = t["DANGER"]
 
-        accent = theme["ACCENT"]
-        warn = theme["WARN"]
-        danger = theme["DANGER"]
+        def clr(pct, lo=75, hi=90):
 
-        def color_logic(value, lo=75, hi=90):
+            if pct >= hi:
+                return get_color_from_hex(dng)
 
-            if value >= hi:
-                return get_color_from_hex(danger)
+            if pct >= lo:
+                return get_color_from_hex(wrn)
 
-            if value >= lo:
-                return get_color_from_hex(warn)
-
-            return get_color_from_hex(accent)
-
-        try:
-            cpu_val = float(get_cpu())
-        except:
-            cpu_val = 0
+            return get_color_from_hex(acc)
 
         try:
-            ram_val, ram_detail = get_ram()
+            cpu_v = float(get_cpu())
         except:
-            ram_val, ram_detail = 0, "N/A"
+            cpu_v = 0
 
         try:
-            storage_val, storage_detail = get_storage()
+            ram_v, ram_d = get_ram()
         except:
-            storage_val, storage_detail = 0, "N/A"
+            ram_v, ram_d = 0, "N/A"
+
+        try:
+            sto_v, sto_d = get_storage()
+        except:
+            sto_v, sto_d = 0, "N/A"
+
+        try:
+            bat = get_battery()
+        except:
+            bat = {"pct": 0, "status": "ERR", "cur": "N/A", "volt": "N/A",
+                   "power": "N/A", "temp": "N/A", "eta": "N/A", "eta_label": "ETA"}
 
         try:
             net = get_network()
@@ -187,79 +175,68 @@ class RootWidget(BoxLayout):
             net = {"dl": "ERR", "ul": "ERR", "ping": "N/A", "signal": "N/A"}
 
         try:
-            thermal_max, thermal_cpu, thermal_detail = get_thermal()
+            th_max, th_cpu, th_det = get_thermal()
         except:
-            thermal_max, thermal_cpu, thermal_detail = 0, 0, "N/A"
+            th_max, th_cpu, th_det = 0, 0, "N/A"
 
         try:
-            fps_val = self.perf.get_fps()
-            gpu_val = self.perf.get_gpu()
-            drops = self.perf.get_frame_drops()
-            lag = self.perf.get_lag()
+            fps_v = self.perf.get_fps()
+            gpu_v = self.perf.get_gpu()
+            drop_v = self.perf.get_frame_drops()
+            lag_v = self.perf.get_lag()
         except:
-            fps_val, gpu_val, drops, lag = 0, "0%", 0, 0
+            fps_v, gpu_v, drop_v, lag_v = 0, "0%", 0, 0
 
-        def apply_ui(dt):
+        def apply(dt):
 
             try:
+                c = self.ids.cpu_card
+                cc = clr(cpu_v)
 
-                card = self.ids.cpu_card
+                c.value = f"{cpu_v:.1f}%"
+                c.subtitle = "usage"
+                c.bar_pct = cpu_v
+                c.bar_color = cc
 
-                col = color_logic(cpu_val)
-
-                card.value = f"{cpu_val:.1f}%"
-                card.subtitle = "usage"
-
-                card.bar_pct = cpu_val
-                card.bar_color = col
-
-                set_gauge(card, cpu_val, list(col))
-
+                _set_gauge(c, cpu_v, list(cc))
             except:
                 pass
 
             try:
+                c = self.ids.ram_card
+                cc = clr(ram_v)
 
-                card = self.ids.ram_card
+                c.value = f"{ram_v:.1f}%"
+                c.subtitle = "used"
+                c.bar_pct = ram_v
+                c.bar_color = cc
+                c.detail1 = ram_d
 
-                col = color_logic(ram_val)
-
-                card.value = f"{ram_val:.1f}%"
-                card.subtitle = "used"
-
-                card.bar_pct = ram_val
-                card.bar_color = col
-
-                card.detail1 = ram_detail
-
-                set_gauge(card, ram_val, list(col))
-
+                _set_gauge(c, ram_v, list(cc))
             except:
                 pass
 
             try:
+                c = self.ids.fps_card
 
-                card = self.ids.fps_card
+                pct = min(fps_v / 60 * 100, 100)
 
-                pct = min(fps_val / 60 * 100, 100)
+                cc = clr(pct)
 
-                col = color_logic(pct)
+                c.value = str(fps_v)
+                c.subtitle = "FPS"
 
-                card.value = str(fps_val)
-                card.subtitle = "FPS"
+                c.bar_pct = pct
+                c.bar_color = cc
 
-                card.bar_pct = pct
-                card.bar_color = col
+                c.detail1 = f"GPU Load: {gpu_v}"
+                c.detail2 = f"Drops: {drop_v}  Lag: {lag_v}"
 
-                card.detail1 = f"GPU Load: {gpu_val}"
-                card.detail2 = f"Drops: {drops}  Lag: {lag}"
-
-                set_gauge(card, pct, list(col))
-
+                _set_gauge(c, pct, list(cc))
             except:
                 pass
 
-        Clock.schedule_once(apply_ui, 0)
+        Clock.schedule_once(apply, 0)
 
 
 class MonitorApp(App):
@@ -274,5 +251,4 @@ class MonitorApp(App):
 
 
 if __name__ == "__main__":
-
     MonitorApp().run()
