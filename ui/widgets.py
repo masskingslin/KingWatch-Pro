@@ -1,37 +1,28 @@
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import (
-    StringProperty,
-    NumericProperty,
-    BooleanProperty,
-    ColorProperty,
-)
-from kivy.utils import get_color_from_hex
+from kivy.properties import StringProperty, ListProperty, NumericProperty, BooleanProperty
 
 
 class StatCard(BoxLayout):
-    """
-    Reusable stat card with:
-      - title       – card header label
-      - value       – large primary value (e.g. "72.4%")
-      - subtitle    – secondary text below value (e.g. "2980MB / 4096MB")
-      - detail1/2   – two small detail rows
-      - bar_pct     – 0-100 for the progress bar
-      - show_bar    – toggle progress bar visibility
-      - bg_color    – card background
-      - bar_color   – filled bar colour (set per-card to accent/warn/danger)
-    """
-    title        = StringProperty("")
-    value        = StringProperty("—")
-    subtitle     = StringProperty("")
-    detail1      = StringProperty("")
-    detail2      = StringProperty("")
-    bar_pct      = NumericProperty(0)
-    show_bar     = BooleanProperty(True)
-
-    bg_color     = ColorProperty(get_color_from_hex("#161616"))
-    title_color  = ColorProperty(get_color_from_hex("#555555"))
-    value_color  = ColorProperty(get_color_from_hex("#00E676"))
-    sub_color    = ColorProperty(get_color_from_hex("#777777"))
-    detail_color = ColorProperty(get_color_from_hex("#555555"))
-    bar_color    = ColorProperty(get_color_from_hex("#00E676"))
-    bar_bg       = ColorProperty(get_color_from_hex("#2A2A2A"))
+    """Custom stat card widget with progress bar and details"""
+    
+    # Basic properties
+    title = StringProperty("STAT")
+    value = StringProperty("--")
+    subtitle = StringProperty("")
+    
+    # Detail rows
+    detail1 = StringProperty("")
+    detail2 = StringProperty("")
+    
+    # Colors
+    bg_color = ListProperty([0.09, 0.09, 0.09, 1])
+    title_color = ListProperty([0.33, 0.33, 0.33, 1])
+    value_color = ListProperty([0.0, 0.90, 0.46, 1])
+    sub_color = ListProperty([0.5, 0.5, 0.5, 1])
+    detail_color = ListProperty([0.5, 0.5, 0.5, 1])
+    
+    # Progress bar
+    show_bar = BooleanProperty(True)
+    bar_pct = NumericProperty(0)
+    bar_color = ListProperty([0.0, 0.90, 0.46, 1])
+    bar_bg = ListProperty([0.15, 0.15, 0.15, 1])
