@@ -219,7 +219,9 @@ class RootWidget(BoxLayout):
             try:
                 c = self.ids.fps_card
 
-                pct = min(fps_v / 60 * 100, 100)
+                refresh = self.perf.get_refresh_rate()
+
+pct = min(fps_v / refresh * 100, 100)
 
                 cc = clr(pct)
 
