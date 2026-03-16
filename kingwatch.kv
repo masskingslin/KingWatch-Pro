@@ -1,5 +1,4 @@
 #:import StatCard ui.widgets.StatCard
-#:import C kivy.utils.get_color_from_hex
 
 <RootWidget>:
     orientation: "vertical"
@@ -8,7 +7,7 @@
 
     canvas.before:
         Color:
-            rgba: C("#0E0E0E")
+            rgba: root.bg
         Rectangle:
             pos: self.pos
             size: self.size
@@ -24,101 +23,55 @@
             StatCard:
                 id: cpu_card
                 title: "CPU"
+                bg_color: root.card
+                value_color: root.accent
+                title_color: root.dim
+                bar_bg: root.card2
 
             StatCard:
                 id: ram_card
                 title: "RAM"
+                bg_color: root.card
+                value_color: root.accent
+                title_color: root.dim
+                bar_bg: root.card2
 
             StatCard:
                 id: storage_card
                 title: "Storage"
+                bg_color: root.card
+                value_color: root.accent
+                title_color: root.dim
+                bar_bg: root.card2
 
             StatCard:
                 id: battery_card
                 title: "Battery"
+                bg_color: root.card
+                value_color: root.accent
+                title_color: root.dim
+                bar_bg: root.card2
 
             StatCard:
                 id: network_card
                 title: "Network"
+                show_bar: False
+                bg_color: root.card
+                value_color: root.accent
+                title_color: root.dim
 
             StatCard:
                 id: thermal_card
                 title: "Thermal"
+                bg_color: root.card
+                value_color: root.accent
+                title_color: root.dim
+                bar_bg: root.card2
 
             StatCard:
                 id: fps_card
                 title: "FPS"
-
-
-<StatCard>:
-
-    orientation: "vertical"
-    padding: "12dp"
-    spacing: "6dp"
-    size_hint_y: None
-    height: "120dp"
-
-    canvas.before:
-        Color:
-            rgba: root.bg_color
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [12]
-
-    BoxLayout:
-        size_hint_y: None
-        height: "30dp"
-
-        Label:
-            text: root.title
-            color: root.title_color
-            font_size: "14sp"
-            halign: "left"
-            valign: "middle"
-            text_size: self.size
-
-        Label:
-            text: root.value
-            color: root.value_color
-            font_size: "20sp"
-            halign: "right"
-            valign: "middle"
-            text_size: self.size
-
-    Label:
-        text: root.subtitle
-        size_hint_y: None
-        height: "18dp"
-        color: root.sub_color
-        font_size: "12sp"
-        halign: "left"
-        valign: "middle"
-        text_size: self.size
-
-    ProgressBar:
-        max: 100
-        value: root.bar_pct
-        size_hint_y: None
-        height: "6dp"
-        opacity: 1 if root.show_bar else 0
-
-    BoxLayout:
-        size_hint_y: None
-        height: "18dp"
-
-        Label:
-            text: root.detail1
-            color: root.detail_color
-            font_size: "11sp"
-            halign: "left"
-            valign: "middle"
-            text_size: self.size
-
-        Label:
-            text: root.detail2
-            color: root.detail_color
-            font_size: "11sp"
-            halign: "right"
-            valign: "middle"
-            text_size: self.size
+                bg_color: root.card
+                value_color: root.accent
+                title_color: root.dim
+                bar_bg: root.card2
