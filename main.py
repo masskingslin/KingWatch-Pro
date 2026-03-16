@@ -19,11 +19,12 @@ from kivy.properties import ColorProperty
 from ui.widgets import StatCard, ThemeChip
 
 from themes import THEME_NAMES, get_theme, DEFAULT_THEME
+
 from core.cpu import get_cpu, get_cpu_freq, get_cpu_cores, get_cpu_procs, get_cpu_uptime
 from core.ram import get_ram
+from core.storage import get_storage
 from core.battery import get_battery
 from core.network import get_network
-from core.storage import get_storage
 from core.thermal import get_thermal
 from core.fps import FPSMonitor
 
@@ -31,6 +32,7 @@ from ui.gauge import draw_gauge
 
 
 def _set_gauge(card, pct, color_rgba):
+
     try:
         fg = tuple(int(c * 255) for c in color_rgba[:3]) + (255,)
         bg = (40, 40, 40, 255)
@@ -42,6 +44,7 @@ def _set_gauge(card, pct, color_rgba):
         ci = CoreImage(buf, ext="png", nocache=True)
 
         card.ids.gauge_img.texture = ci.texture
+
     except Exception:
         pass
 
@@ -80,22 +83,30 @@ class RootWidget(BoxLayout):
             pass
 
     def _build_chips(self):
+
         row = self.ids.chips_row
         row.clear_widgets()
 
         for name in THEME_NAMES:
+
             chip = ThemeChip(label=name)
+
             chip._name = name
+
             chip.bind(on_touch_up=self._on_chip)
+
             row.add_widget(chip)
 
     def _on_chip(self, chip, touch):
+
         if chip.collide_point(*touch.pos):
             self._apply_theme(chip._name)
             return True
 
     def _apply_theme(self, name):
+
         self._tname = name
+
         t = get_theme(name)
 
         self.bg = get_color_from_hex(t["BG"])
@@ -109,25 +120,38 @@ class RootWidget(BoxLayout):
         self._style_chips(t)
 
     def _style_chips(self, t):
+
         try:
+
             for chip in self.ids.chips_row.children:
 
                 sel = chip.label == self._tname
 
                 chip.selected = sel
 
-                chip.chip_bg = get_color_from_hex(
-                    t["ACCENT"] + "33") if sel else get_color_from_hex(t["CARD"])
+                chip.chip_bg = (
+                    get_color_from_hex(t["ACCENT"] + "33")
+                    if sel
+                    else get_color_from_hex(t["CARD"])
+                )
 
-                chip.chip_border = get_color_from_hex(
-                    t["ACCENT"]) if sel else get_color_from_hex(t["CARD2"])
+                chip.chip_border = (
+                    get_color_from_hex(t["ACCENT"])
+                    if sel
+                    else get_color_from_hex(t["CARD2"])
+                )
 
-                chip.chip_text = get_color_from_hex(
-                    t["ACCENT"]) if sel else get_color_from_hex(t["DIM"])
+                chip.chip_text = (
+                    get_color_from_hex(t["ACCENT"])
+                    if sel
+                    else get_color_from_hex(t["DIM"])
+                )
+
         except Exception:
             pass
 
     def update_stats(self, *a):
+
         threading.Thread(target=self._collect, daemon=True).start()
 
     def _collect(self):
@@ -166,8 +190,7 @@ class RootWidget(BoxLayout):
         try:
             bat = get_battery()
         except:
-            bat = {"pct": 0, "status": "ERR", "cur": "N/A", "volt": "N/A",
-                   "power": "N/A", "temp": "N/A", "eta": "N/A", "eta_label": "ETA"}
+            bat = {"pct": 0, "status": "ERR"}
 
         try:
             net = get_network()
@@ -184,57 +207,132 @@ class RootWidget(BoxLayout):
             gpu_v = self.perf.get_gpu()
             drop_v = self.perf.get_frame_drops()
             lag_v = self.perf.get_lag()
+            refresh = self.perf.get_refresh_rate()
         except:
-            fps_v, gpu_v, drop_v, lag_v = 0, "0%", 0, 0
+            fps_v, gpu_v, drop_v, lag_v, refresh = 0, "0%", 0, 0, 60
 
         def apply(dt):
 
             try:
                 c = self.ids.cpu_card
+
                 cc = clr(cpu_v)
 
-                c.value = f"{cpu_v:.1f}%"
+                c.value = "%.1f%%" % cpu_v
                 c.subtitle = "usage"
+
                 c.bar_pct = cpu_v
                 c.bar_color = cc
 
                 _set_gauge(c, cpu_v, list(cc))
+
             except:
                 pass
 
             try:
                 c = self.ids.ram_card
+
                 cc = clr(ram_v)
 
-                c.value = f"{ram_v:.1f}%"
+                c.value = "%.1f%%" % ram_v
                 c.subtitle = "used"
+
                 c.bar_pct = ram_v
                 c.bar_color = cc
+
                 c.detail1 = ram_d
 
                 _set_gauge(c, ram_v, list(cc))
+
+            except:
+                pass
+
+            try:
+                c = self.ids.storage_card
+
+                cc = clr(sto_v)
+
+                c.value = "%.1f%%" % sto_v
+                c.subtitle = "used"
+
+                c.bar_pct = sto_v
+                c.bar_color = cc
+
+                c.detail1 = sto_d
+
+                _set_gauge(c, sto_v, list(cc))
+
+            except:
+                pass
+
+            try:
+                c = self.ids.battery_card
+
+                pct = bat["pct"]
+
+                cc = clr(pct)
+
+                c.value = "%.0f%%" % pct
+                c.subtitle = bat["status"]
+
+                c.bar_pct = pct
+                c.bar_color = cc
+
+                _set_gauge(c, pct, list(cc))
+
+            except:
+                pass
+
+            try:
+                c = self.ids.network_card
+
+                c.value = net["dl"]
+                c.subtitle = net["ping"]
+
+                c.detail1 = "UL: %s" % net["ul"]
+                c.detail2 = net["signal"]
+
+            except:
+                pass
+
+            try:
+                c = self.ids.thermal_card
+
+                bar = min(th_max / 100 * 100, 100)
+
+                cc = clr(bar, lo=60, hi=80)
+
+                c.value = "%.1f C" % th_max
+                c.subtitle = "CPU %.1f C" % th_cpu
+
+                c.bar_pct = bar
+                c.bar_color = cc
+
+                c.detail1 = th_det
+
+                _set_gauge(c, bar, list(cc))
+
             except:
                 pass
 
             try:
                 c = self.ids.fps_card
 
-                refresh = self.perf.get_refresh_rate()
-
-pct = min(fps_v / refresh * 100, 100)
+                pct = min((fps_v / refresh) * 100, 100)
 
                 cc = clr(pct)
 
-                c.value = str(fps_v)
-                c.subtitle = "FPS"
+                c.value = "%d" % fps_v
+                c.subtitle = "%dHz" % refresh
 
                 c.bar_pct = pct
                 c.bar_color = cc
 
-                c.detail1 = f"GPU Load: {gpu_v}"
-                c.detail2 = f"Drops: {drop_v}  Lag: {lag_v}"
+                c.detail1 = "GPU Load: %s" % gpu_v
+                c.detail2 = "Drops: %d  Lag: %d" % (drop_v, lag_v)
 
                 _set_gauge(c, pct, list(cc))
+
             except:
                 pass
 
