@@ -5,7 +5,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import ColorProperty
 from kivy.utils import get_color_from_hex
 
-from themes import get_theme
+from theme import get_theme
 
 from core.cpu import get_cpu
 from core.ram import get_ram
@@ -24,7 +24,7 @@ class RootWidget(BoxLayout):
     dim = ColorProperty([0.5,0.5,0.5,1])
     accent = ColorProperty([0,1,0,1])
 
-    def start_monitor(self):
+    def start(self):
 
         theme = get_theme()
 
@@ -34,13 +34,14 @@ class RootWidget(BoxLayout):
         self.dim = get_color_from_hex(theme["DIM"])
         self.accent = get_color_from_hex(theme["ACCENT"])
 
-        self.fps = FPSMonitor()
+        self.fps_monitor = FPSMonitor()
 
         Clock.schedule_interval(self.update_stats, 2)
 
     def update_stats(self, dt):
 
         try:
+
             cpu = get_cpu()
             ram = get_ram()
             storage = get_storage()
@@ -48,8 +49,8 @@ class RootWidget(BoxLayout):
             network = get_network()
             thermal = get_thermal()
 
-            fps = self.fps.get_fps()
-            refresh = max(self.fps.get_refresh_rate(), 60)
+            fps = self.fps_monitor.get_fps()
+            refresh = max(self.fps_monitor.get_refresh_rate(), 60)
 
             self.ids.cpu_card.value = f"{cpu['usage']:.1f}%"
             self.ids.cpu_card.bar_pct = cpu["usage"]
@@ -74,7 +75,7 @@ class RootWidget(BoxLayout):
             self.ids.fps_card.bar_pct = min((fps / refresh) * 100, 100)
 
         except Exception as e:
-            print("Monitor error:", e)
+            print("monitor error:", e)
 
 
 class KingWatchApp(App):
@@ -82,7 +83,7 @@ class KingWatchApp(App):
     def build(self):
 
         root = Builder.load_file("kingwatch.kv")
-        root.start_monitor()
+        root.start()
         return root
 
 
