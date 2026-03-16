@@ -38,15 +38,3 @@ class FPSMonitor:
 
     def get_refresh_rate(self):
         return self.refresh
-
-    def get_gpu(self):
-        fps = self.get_fps()
-        return f"{int((fps / self.refresh) * 100)}%"
-
-    def get_frame_time(self):
-
-        if not self.frames:
-            return 0
-
-        avg = sum(self.frames) / len(self.frames)
-        return round(avg * 1000, 2)
