@@ -1,11 +1,103 @@
 #:import StatCard ui.widgets.StatCard
+#:import dp kivy.metrics.dp
 
-RootWidget:
+# ── StatCard template ──────────────────────────────────────────────────────
+<StatCard>:
+    orientation: "vertical"
+    size_hint_y: None
+    height: self.minimum_height
+    padding: dp(10)
+    spacing: dp(6)
 
+    canvas.before:
+        Color:
+            rgba: self.bg_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12)]
+
+    # Title row
+    BoxLayout:
+        size_hint_y: None
+        height: dp(22)
+        Label:
+            text: root.title.upper()
+            font_size: dp(11)
+            color: root.title_color
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+            bold: True
+
+    # Value + subtitle
+    BoxLayout:
+        size_hint_y: None
+        height: dp(44)
+        orientation: "vertical"
+        Label:
+            id: value_label
+            text: root.value
+            font_size: dp(26)
+            bold: True
+            color: root.value_color
+            halign: "left"
+            valign: "bottom"
+            text_size: self.size
+        Label:
+            id: subtitle_label
+            text: root.subtitle
+            font_size: dp(11)
+            color: root.sub_color
+            halign: "left"
+            valign: "top"
+            text_size: self.size
+
+    # Progress bar (optional)
+    BoxLayout:
+        size_hint_y: None
+        height: dp(8) if root.show_bar else 0
+        opacity: 1 if root.show_bar else 0
+        canvas.before:
+            Color:
+                rgba: root.bar_bg
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(4)]
+            Color:
+                rgba: root.bar_color
+            RoundedRectangle:
+                pos: self.pos
+                size: (self.width * min(1, root.bar_pct / 100), self.height)
+                radius: [dp(4)]
+
+    # Detail rows
+    Label:
+        size_hint_y: None
+        height: dp(16) if root.detail1 else 0
+        opacity: 1 if root.detail1 else 0
+        text: root.detail1
+        font_size: dp(10)
+        color: root.detail_color
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+    Label:
+        size_hint_y: None
+        height: dp(16) if root.detail2 else 0
+        opacity: 1 if root.detail2 else 0
+        text: root.detail2
+        font_size: dp(10)
+        color: root.detail_color
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+
+
+# ── Root layout ────────────────────────────────────────────────────────────
 <RootWidget>:
     orientation: "vertical"
-    padding: "10dp"
-    spacing: "10dp"
 
     canvas.before:
         Color:
@@ -14,39 +106,114 @@ RootWidget:
             pos: self.pos
             size: self.size
 
+    # ── Header bar ──────────────────────────────────────────────────────
+    BoxLayout:
+        size_hint_y: None
+        height: dp(52)
+        padding: [dp(12), dp(8)]
+        spacing: dp(8)
+
+        canvas.before:
+            Color:
+                rgba: root.card_bg
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        Label:
+            text: "⚡ KingWatch Pro v15"
+            font_size: dp(15)
+            bold: True
+            color: root.text_col
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+            size_hint_x: 1
+
+        # Theme cycle button ◑
+        Button:
+            text: "◑"
+            size_hint: None, None
+            size: dp(36), dp(36)
+            font_size: dp(18)
+            background_color: root.accent
+            color: 0, 0, 0, 1
+            on_release: root.cycle_theme()
+
+        # Collapse toggle _
+        Button:
+            text: "_"
+            size_hint: None, None
+            size: dp(36), dp(36)
+            font_size: dp(18)
+            background_color: root.dim_col
+            color: root.text_col
+            on_release: root.toggle_collapse()
+
+    # ── Stat cards (hidden when collapsed) ──────────────────────────────
     ScrollView:
+        opacity: 0 if root.collapsed else 1
+        size_hint_y: 0 if root.collapsed else 1
 
         GridLayout:
             cols: 1
             size_hint_y: None
             height: self.minimum_height
-            spacing: "10dp"
+            spacing: dp(10)
+            padding: dp(10)
 
             StatCard:
                 id: cpu_card
                 title: "CPU"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.accent
+                value_color: root.accent
 
             StatCard:
                 id: ram_card
                 title: "RAM"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.accent
+                value_color: root.accent
 
             StatCard:
                 id: storage_card
                 title: "Storage"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.warn
+                value_color: root.warn
 
             StatCard:
                 id: battery_card
                 title: "Battery"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.accent
+                value_color: root.accent
 
             StatCard:
                 id: network_card
                 title: "Network"
+                bg_color: root.card_bg
+                title_color: root.dim_col
                 show_bar: False
+                value_color: root.accent
 
             StatCard:
                 id: thermal_card
                 title: "Thermal"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.danger
+                value_color: root.danger
 
             StatCard:
                 id: fps_card
                 title: "FPS"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.accent
+                value_color: root.accent
