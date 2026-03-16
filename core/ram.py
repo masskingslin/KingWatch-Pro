@@ -1,31 +1,44 @@
-def update(self, dt):
+import os
 
-    # FPS from Kivy engine
-    self.fps = int(Clock.get_fps())
 
-    now = time()
+def get_ram():
+    """
+    Returns:
+        (percentage_used, "used MB / total MB")
+    Works on Android and Linux.
+    """
 
-    if now - self.last_time >= 1:
+    try:
+        mem = {}
 
-        self.last_time = now
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    mem[parts[0].rstrip(":")] = int(parts[1])
 
-        # RAM stats
-        self.ram_pct, self.ram_usage_str = self._calculate_ram()
+        total = mem.get("MemTotal", 0)
 
-        # GPU load estimation
-        if self.fps >= 55:
-            self.gpu_load = 40
-        elif self.fps >= 40:
-            self.gpu_load = 65
-        elif self.fps >= 25:
-            self.gpu_load = 80
-        else:
-            self.gpu_load = 95
+        # Android sometimes lacks MemAvailable
+        available = mem.get("MemAvailable")
 
-    # frame drop
-    if dt > 0.05:
-        self.frame_drops += 1
+        if available is None:
+            free = mem.get("MemFree", 0)
+            buffers = mem.get("Buffers", 0)
+            cached = mem.get("Cached", 0)
+            available = free + buffers + cached
 
-    # lag detection
-    if dt > 0.1:
-        self.lag_events += 1
+        used = total - available
+
+        if total <= 0:
+            return 0.0, "N/A"
+
+        pct = round((used / total) * 100, 1)
+
+        used_mb = int(used / 1024)
+        total_mb = int(total / 1024)
+
+        return pct, f"{used_mb} MB / {total_mb} MB"
+
+    except Exception:
+        return 0.0, "N/A"
