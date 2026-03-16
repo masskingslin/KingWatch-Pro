@@ -1,3 +1,4 @@
+import time
 from kivy.clock import Clock
 from kivy.core.window import Window
 
@@ -5,40 +6,113 @@ from kivy.core.window import Window
 class FPSMonitor:
 
     def __init__(self):
-        self.refresh_rate = Window.refresh_rate if Window.refresh_rate else 60
+
+        # Detect refresh rate
+        try:
+            rr = Window.refresh_rate
+            if rr and rr > 0:
+                self.refresh = int(rr)
+            else:
+                self.refresh = 60
+        except:
+            self.refresh = 60
+
+        self.last_frame = time.time()
+        self.frame_times = []
+        self.frame_drops = 0
+        self.lag_spikes = 0
+
+        Clock.schedule_interval(self._track_frame, 0)
+
+    # --------------------------------------------------
+
+    def _track_frame(self, dt):
+
+        now = time.time()
+        frame_time = now - self.last_frame
+        self.last_frame = now
+
+        self.frame_times.append(frame_time)
+
+        if len(self.frame_times) > 120:
+            self.frame_times.pop(0)
+
+        # frame drop detection
+        ideal = 1.0 / self.refresh
+        if frame_time > ideal * 1.5:
+            self.frame_drops += 1
+
+        # lag spike detection
+        if frame_time > 0.1:
+            self.lag_spikes += 1
+
+    # --------------------------------------------------
 
     def get_fps(self):
-        return int(Clock.get_fps())
+
+        try:
+            fps = int(Clock.get_fps())
+        except:
+            fps = 0
+
+        return fps
+
+    # --------------------------------------------------
 
     def get_refresh_rate(self):
-        return int(self.refresh_rate)
+        return self.refresh
+
+    # --------------------------------------------------
+
+    def get_frame_drops(self):
+
+        drops = self.frame_drops
+        self.frame_drops = 0
+        return drops
+
+    # --------------------------------------------------
+
+    def get_lag(self):
+
+        lag = self.lag_spikes
+        self.lag_spikes = 0
+        return lag
+
+    # --------------------------------------------------
+
+    def get_frame_time(self):
+
+        if not self.frame_times:
+            return 0
+
+        avg = sum(self.frame_times) / len(self.frame_times)
+
+        return round(avg * 1000, 2)
+
+    # --------------------------------------------------
 
     def get_gpu(self):
 
         fps = self.get_fps()
-        r = self.refresh_rate
 
-        load = (fps / r) * 100
+        load = (fps / self.refresh) * 100
 
-        if load >= 90:
-            return "40%"
-        elif load >= 70:
-            return "60%"
-        elif load >= 50:
-            return "80%"
-        else:
-            return "95%"
+        if load > 100:
+            load = 100
 
-    def get_frame_drops(self):
+        return f"{int(load)}%"
 
-        fps = self.get_fps()
-        r = self.refresh_rate
+    # --------------------------------------------------
 
-        return max(0, r - fps)
+    def get_stability(self):
 
-    def get_lag(self):
+        if len(self.frame_times) < 10:
+            return 100
 
-        fps = self.get_fps()
-        r = self.refresh_rate
+        avg = sum(self.frame_times) / len(self.frame_times)
 
-        return 1 if fps < (r * 0.5) else 0
+        variance = sum((t - avg) ** 2 for t in self.frame_times) / len(self.frame_times)
+
+        stability = max(0, 100 - (variance * 10000))
+
+        return int(stability)
