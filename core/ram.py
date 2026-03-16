@@ -1,25 +1,25 @@
 def get_ram():
 
-    mem = {}
-
     try:
+
+        mem = {}
+
         with open("/proc/meminfo") as f:
             for line in f:
-                k, v = line.split(":")
-                mem[k] = int(v.split()[0])
+                p = line.split()
+                mem[p[0].replace(":", "")] = int(p[1])
 
         total = mem["MemTotal"]
-        free = mem["MemAvailable"]
+        avail = mem.get("MemAvailable", mem["MemFree"])
 
-        used = total - free
+        used = total - avail
 
-        pct = (used / total) * 100
+        pct = round(used / total * 100, 1)
 
-        return {
-            "pct": pct,
-            "used": f"{used//1024}MB",
-            "total": f"{total//1024}MB"
-        }
+        used_mb = used // 1024
+        total_mb = total // 1024
+
+        return pct, f"{used_mb}MB / {total_mb}MB"
 
     except:
-        return {"pct": 0, "used": "0", "total": "0"}
+        return 0, "N/A"
