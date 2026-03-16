@@ -62,6 +62,7 @@
                 pos: self.pos
                 size: self.width, self.height
                 radius: [3]
+
         canvas:
             Color:
                 rgba: root.bar_color
@@ -106,6 +107,7 @@
             pos: self.pos
             size: self.size
             radius: [15]
+
         Color:
             rgba: root.chip_border
         Line:
@@ -241,6 +243,17 @@
             StatCard:
                 id: ram_card
                 title: "RAM"
+                show_bar: True
+                bg_color: root.card
+                title_color: root.dim
+                value_color: root.accent
+                sub_color: root.dim
+                bar_bg: root.card2
+                detail_color: root.dim
+
+            StatCard:
+                id: fps_card
+                title: "FPS"
                 show_bar: True
                 bg_color: root.card
                 title_color: root.dim
