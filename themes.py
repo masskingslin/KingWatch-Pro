@@ -1,64 +1,101 @@
-THEMES = {
+"""
+KingWatch Pro — 8 colour themes (mirrors the original themes.py).
+"""
+
+THEME_NAMES = [
+    "Dark Pro",
+    "Amoled",
+    "Midnight",
+    "Cyberpunk",
+    "Solarized",
+    "Forest",
+    "Sunset",
+    "Ice Blue",
+]
+
+_THEMES = {
     "Dark Pro": {
-        "BG":"#0A0A0A","CARD":"#161616","CARD2":"#242424",
-        "TEXT":"#FFFFFF","DIM":"#555555",
-        "ACCENT":"#00E676","WARN":"#FF9100","DANGER":"#FF1744",
-        "BTN_TEXT":"#000000"
+        "BG":     "#0A0A0A",
+        "CARD":   "#161616",
+        "CARD2":  "#1E1E1E",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#555555",
+        "ACCENT": "#00E676",
+        "WARN":   "#FF9100",
+        "DANGER": "#FF1744",
     },
-
     "Amoled": {
-        "BG":"#000000","CARD":"#0D0D0D","CARD2":"#1A1A1A",
-        "TEXT":"#FFFFFF","DIM":"#444444",
-        "ACCENT":"#03DAC6","WARN":"#FFB74D","DANGER":"#CF6679",
-        "BTN_TEXT":"#000000"
+        "BG":     "#000000",
+        "CARD":   "#0D0D0D",
+        "CARD2":  "#1A1A1A",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#444444",
+        "ACCENT": "#00E5FF",
+        "WARN":   "#FFAB00",
+        "DANGER": "#FF1744",
     },
-
     "Midnight": {
-        "BG":"#0D1B2A","CARD":"#1B263B","CARD2":"#243B55",
-        "TEXT":"#E0E1DD","DIM":"#778DA9",
-        "ACCENT":"#4FC3F7","WARN":"#FFA726","DANGER":"#EF5350",
-        "BTN_TEXT":"#0D1B2A"
+        "BG":     "#0D0D2B",
+        "CARD":   "#13133D",
+        "CARD2":  "#1A1A4F",
+        "TEXT":   "#E8E8FF",
+        "DIM":    "#5050AA",
+        "ACCENT": "#7C83FD",
+        "WARN":   "#FFAB40",
+        "DANGER": "#FF5252",
     },
-
     "Cyberpunk": {
-        "BG":"#0A0010","CARD":"#150025","CARD2":"#200038",
-        "TEXT":"#F0E6FF","DIM":"#9E77CC",
-        "ACCENT":"#FF00FF","WARN":"#FF6D00","DANGER":"#FF1744",
-        "BTN_TEXT":"#000000"
+        "BG":     "#0D001A",
+        "CARD":   "#1A0030",
+        "CARD2":  "#260040",
+        "TEXT":   "#F0E6FF",
+        "DIM":    "#7700AA",
+        "ACCENT": "#FF00FF",
+        "WARN":   "#FFFF00",
+        "DANGER": "#FF1744",
     },
-
     "Solarized": {
-        "BG":"#002B36","CARD":"#073642","CARD2":"#0A4252",
-        "TEXT":"#FDF6E3","DIM":"#657B83",
-        "ACCENT":"#2AA198","WARN":"#CB4B16","DANGER":"#DC322F",
-        "BTN_TEXT":"#002B36"
+        "BG":     "#002B36",
+        "CARD":   "#073642",
+        "CARD2":  "#073642",
+        "TEXT":   "#FDF6E3",
+        "DIM":    "#586E75",
+        "ACCENT": "#2AA198",
+        "WARN":   "#CB4B16",
+        "DANGER": "#DC322F",
     },
-
     "Forest": {
-        "BG":"#071A0F","CARD":"#0E2918","CARD2":"#163D24",
-        "TEXT":"#E8F5E9","DIM":"#4CAF50",
-        "ACCENT":"#69F0AE","WARN":"#FF7043","DANGER":"#EF5350",
-        "BTN_TEXT":"#071A0F"
+        "BG":     "#0A1A0A",
+        "CARD":   "#112211",
+        "CARD2":  "#1A2E1A",
+        "TEXT":   "#D4EDDA",
+        "DIM":    "#3A5C3A",
+        "ACCENT": "#4CAF50",
+        "WARN":   "#FFC107",
+        "DANGER": "#F44336",
     },
-
     "Sunset": {
-        "BG":"#1A0A00","CARD":"#2C1500","CARD2":"#3E1F00",
-        "TEXT":"#FFF3E0","DIM":"#FF8A65",
-        "ACCENT":"#FF6D00","WARN":"#FFCA28","DANGER":"#F44336",
-        "BTN_TEXT":"#000000"
+        "BG":     "#1A0A00",
+        "CARD":   "#2E1500",
+        "CARD2":  "#3D1F00",
+        "TEXT":   "#FFE5CC",
+        "DIM":    "#8B4513",
+        "ACCENT": "#FF6D00",
+        "WARN":   "#FFCA28",
+        "DANGER": "#F44336",
     },
-
     "Ice Blue": {
-        "BG":"#E8F4FD","CARD":"#FFFFFF","CARD2":"#D6ECFA",
-        "TEXT":"#0D2137","DIM":"#607D8B",
-        "ACCENT":"#0288D1","WARN":"#F57C00","DANGER":"#D32F2F",
-        "BTN_TEXT":"#FFFFFF"
-    }
+        "BG":     "#001A2E",
+        "CARD":   "#002244",
+        "CARD2":  "#003366",
+        "TEXT":   "#E0F4FF",
+        "DIM":    "#336699",
+        "ACCENT": "#00BFFF",
+        "WARN":   "#FFD700",
+        "DANGER": "#FF4500",
+    },
 }
 
-THEME_NAMES = list(THEMES.keys())
-DEFAULT_THEME = "Dark Pro"
 
-
-def get_theme(name=DEFAULT_THEME):
-    return THEMES.get(name, THEMES[DEFAULT_THEME])
+def get_theme(name: str) -> dict:
+    return _THEMES.get(name, _THEMES["Dark Pro"])
