@@ -1,40 +1,49 @@
-import time
 from kivy.clock import Clock
-from kivy.core.window import Window
+from time import time
 
 
-class FPSMonitor:
+class PerformanceMonitor:
 
     def __init__(self):
 
-        try:
-            self.refresh = int(Window.refresh_rate)
-            if self.refresh <= 0:
-                self.refresh = 60
-        except:
-            self.refresh = 60
+        self.frames = 0
+        self.last = time()
+        self.fps = 0
 
-        self.last = time.time()
-        self.frames = []
+        self.frame_drops = 0
+        self.lag_events = 0
 
-        Clock.schedule_interval(self.track, 0)
+        Clock.schedule_interval(self.update, 0)
 
-    def track(self, dt):
+    def update(self, dt):
 
-        now = time.time()
-        ft = now - self.last
-        self.last = now
+        self.frames += 1
 
-        self.frames.append(ft)
+        if dt > 0.05:
+            self.frame_drops += 1
 
-        if len(self.frames) > 120:
-            self.frames.pop(0)
+        if dt > 0.1:
+            self.lag_events += 1
+
+        now = time()
+
+        if now - self.last >= 1:
+            self.fps = self.frames
+            self.frames = 0
+            self.last = now
 
     def get_fps(self):
-        try:
-            return int(Clock.get_fps())
-        except:
-            return 0
+        return self.fps
 
-    def get_refresh_rate(self):
-        return self.refresh
+    def get_gpu(self):
+
+        if self.fps >= 55:
+            return "Low"
+
+        if self.fps >= 40:
+            return "Medium"
+
+        if self.fps >= 25:
+            return "High"
+
+        return "Max"
