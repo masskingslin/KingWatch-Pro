@@ -2,6 +2,7 @@ from kivy.app import App
 from kivy.lang import Builder
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
+from kivy.properties import ColorProperty
 from kivy.utils import get_color_from_hex
 
 from ui.theme import get_theme
@@ -16,16 +17,23 @@ from core.fps import FPSMonitor
 
 class RootWidget(BoxLayout):
 
+    bg = ColorProperty([0,0,0,1])
+    card = ColorProperty([0,0,0,1])
+    card2 = ColorProperty([0,0,0,1])
+    text = ColorProperty([1,1,1,1])
+    dim = ColorProperty([0.5,0.5,0.5,1])
+    accent = ColorProperty([0,1,0,1])
+
     def on_kv_post(self, base_widget):
 
-        self.theme = get_theme()
+        theme = get_theme()
 
-        self.bg = get_color_from_hex(self.theme["BG"])
-        self.card = get_color_from_hex(self.theme["CARD"])
-        self.card2 = get_color_from_hex(self.theme["CARD2"])
-        self.text = get_color_from_hex(self.theme["TEXT"])
-        self.dim = get_color_from_hex(self.theme["DIM"])
-        self.accent = get_color_from_hex(self.theme["ACCENT"])
+        self.bg = get_color_from_hex(theme["BG"])
+        self.card = get_color_from_hex(theme["CARD"])
+        self.card2 = get_color_from_hex(theme["CARD2"])
+        self.text = get_color_from_hex(theme["TEXT"])
+        self.dim = get_color_from_hex(theme["DIM"])
+        self.accent = get_color_from_hex(theme["ACCENT"])
 
         self.fps_monitor = FPSMonitor()
 
@@ -69,7 +77,6 @@ class RootWidget(BoxLayout):
 class KingWatchApp(App):
 
     def build(self):
-
         return Builder.load_file("kingwatch.kv")
 
 
