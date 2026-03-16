@@ -1,5 +1,4 @@
 #:import StatCard ui.widgets.StatCard
-#:import C kivy.utils.get_color_from_hex
 
 <RootWidget>:
     orientation: "vertical"
@@ -17,9 +16,9 @@
 
         GridLayout:
             cols: 1
-            spacing: "10dp"
             size_hint_y: None
             height: self.minimum_height
+            spacing: "10dp"
 
             StatCard:
                 id: cpu_card
