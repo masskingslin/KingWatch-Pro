@@ -1,9 +1,10 @@
-import threading
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
+from kivy.utils import get_color_from_hex
 
+from ui.theme import get_theme
 from core.cpu import get_cpu
 from core.ram import get_ram
 from core.storage import get_storage
@@ -15,14 +16,22 @@ from core.fps import FPSMonitor
 
 class RootWidget(BoxLayout):
 
-    def on_kv_post(self, *args):
-        self.fps = FPSMonitor()
+    def on_kv_post(self, base_widget):
+
+        self.theme = get_theme()
+
+        self.bg = get_color_from_hex(self.theme["BG"])
+        self.card = get_color_from_hex(self.theme["CARD"])
+        self.card2 = get_color_from_hex(self.theme["CARD2"])
+        self.text = get_color_from_hex(self.theme["TEXT"])
+        self.dim = get_color_from_hex(self.theme["DIM"])
+        self.accent = get_color_from_hex(self.theme["ACCENT"])
+
+        self.fps_monitor = FPSMonitor()
+
         Clock.schedule_interval(self.update_stats, 2)
 
-    def update_stats(self, *args):
-        threading.Thread(target=self.collect_stats, daemon=True).start()
-
-    def collect_stats(self):
+    def update_stats(self, dt):
 
         cpu = get_cpu()
         ram = get_ram()
@@ -31,69 +40,37 @@ class RootWidget(BoxLayout):
         network = get_network()
         thermal = get_thermal()
 
-        fps = self.fps.get_fps()
-        refresh = self.fps.get_refresh_rate()
-        gpu = self.fps.get_gpu()
-        frametime = self.fps.get_frame_time()
+        fps = self.fps_monitor.get_fps()
+        refresh = self.fps_monitor.get_refresh_rate()
 
-        Clock.schedule_once(lambda dt:
-            self.apply(cpu, ram, storage, battery,
-                       network, thermal,
-                       fps, refresh, gpu, frametime)
-        )
+        self.ids.cpu_card.value = f"{cpu['usage']:.1f}%"
+        self.ids.cpu_card.bar_pct = cpu["usage"]
 
-    def apply(self, cpu, ram, storage, battery,
-              network, thermal,
-              fps, refresh, gpu, frametime):
+        self.ids.ram_card.value = f"{ram['pct']:.1f}%"
+        self.ids.ram_card.bar_pct = ram["pct"]
 
-        c = self.ids.cpu_card
-        c.value = f"{cpu['usage']:.1f}%"
-        c.bar_pct = cpu['usage']
-        c.detail1 = f"Freq {cpu['freq']}MHz  Cores {cpu['cores']}"
-        c.detail2 = f"Proc {cpu['procs']}  Up {cpu['uptime']}"
+        self.ids.storage_card.value = f"{storage['pct']:.1f}%"
+        self.ids.storage_card.bar_pct = storage["pct"]
 
-        r = self.ids.ram_card
-        r.value = f"{ram['pct']:.1f}%"
-        r.bar_pct = ram['pct']
-        r.detail1 = f"{ram['used']} / {ram['total']}"
+        self.ids.battery_card.value = f"{battery['pct']}%"
+        self.ids.battery_card.bar_pct = battery["pct"]
 
-        s = self.ids.storage_card
-        s.value = f"{storage['pct']:.1f}%"
-        s.bar_pct = storage['pct']
-        s.detail1 = f"{storage['used']} / {storage['total']}"
+        self.ids.network_card.value = network["dl"]
+        self.ids.network_card.subtitle = network["ping"]
 
-        b = self.ids.battery_card
-        b.value = f"{battery['pct']}%"
-        b.subtitle = battery['status']
-        b.bar_pct = battery['pct']
-        b.detail1 = f"{battery['volt']}V {battery['current']}mA"
-        b.detail2 = f"{battery['temp']}°C"
+        self.ids.thermal_card.value = f"{thermal['max']}°C"
+        self.ids.thermal_card.bar_pct = thermal["max"]
 
-        n = self.ids.network_card
-        n.value = network['dl']
-        n.subtitle = network['ping']
-        n.detail1 = f"DL {network['dl']} UL {network['ul']}"
-        n.detail2 = network['signal']
-
-        t = self.ids.thermal_card
-        t.value = f"{thermal['max']}°C"
-        t.subtitle = f"CPU {thermal['cpu']}°C"
-        t.detail1 = thermal['detail']
-        t.bar_pct = min(thermal['max'], 100)
-
-        f = self.ids.fps_card
-        f.value = str(fps)
-        f.subtitle = f"{refresh}Hz"
-        f.bar_pct = min((fps / refresh) * 100, 100)
-        f.detail1 = f"GPU {gpu}"
-        f.detail2 = f"{frametime} ms"
+        self.ids.fps_card.value = str(fps)
+        self.ids.fps_card.subtitle = f"{refresh} Hz"
+        self.ids.fps_card.bar_pct = min((fps / refresh) * 100, 100)
 
 
 class KingWatchApp(App):
 
     def build(self):
-        Builder.load_file("kingwatch.kv")
-        return RootWidget()
+
+        return Builder.load_file("kingwatch.kv")
 
 
 if __name__ == "__main__":
