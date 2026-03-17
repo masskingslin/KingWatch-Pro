@@ -1,12 +1,16 @@
 """
 KingWatch Pro v17 - main.py
-KingwatchApp -> Kivy auto-loads kingwatch.kv once. No Builder.load_file.
+- KingwatchApp → auto-loads kingwatch.kv once (no Builder.load_file)
+- CPU card shows usage arc + GPU load
+- Thermal cycles CPU→GPU→Battery each second
+- All arcs auto-color green/orange/red by pct
 """
 import time as _time
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import ListProperty, BooleanProperty, StringProperty
+
 from core.fps import PerformanceMonitor
 from core.cpu import get_cpu
 from core.ram import get_ram
@@ -20,13 +24,13 @@ from themes import THEME_NAMES, get_theme
 class RootWidget(BoxLayout):
     bg        = ListProperty([0.04, 0.04, 0.04, 1])
     card_bg   = ListProperty([0.09, 0.09, 0.09, 1])
-    accent    = ListProperty([0.0,  0.90, 0.46, 1])
+    accent    = ListProperty([0.0,  0.88, 0.44, 1])
     warn      = ListProperty([1.0,  0.57, 0.0,  1])
-    danger    = ListProperty([1.0,  0.09, 0.27, 1])
+    danger    = ListProperty([1.0,  0.13, 0.27, 1])
     text_col  = ListProperty([1,    1,    1,    1])
     dim_col   = ListProperty([0.33, 0.33, 0.33, 1])
     sub_col   = ListProperty([0.55, 0.55, 0.55, 1])
-    bar_bg    = ListProperty([0.12, 0.12, 0.12, 1])
+    bar_bg    = ListProperty([0.13, 0.13, 0.13, 1])
     collapsed = BooleanProperty(False)
     clock_str = StringProperty("00:00:00")
     theme_idx = 0
@@ -56,6 +60,9 @@ class RootWidget(BoxLayout):
 
 
 class KingwatchApp(App):
+    # auto-loads kingwatch.kv — NO Builder.load_file anywhere
+
+    _thermal_mode = 0   # 0=CPU  1=GPU  2=Battery  (cycles each second)
 
     def build(self):
         self.monitor     = PerformanceMonitor()
@@ -69,47 +76,50 @@ class KingwatchApp(App):
         Clock.schedule_interval(self.root_widget.tick_clock, 1.0)
         return self.root_widget
 
+    # ── FPS / GPU ─────────────────────────────────────────────────────────
     def _update_fps(self, dt):
         r   = self.root_widget
         fps = self.monitor.get_fps()
         gpu = self.monitor.get_gpu()
         ref = self.monitor.get_refresh_rate()
-        pct = min(100, (fps / ref * 100)) if ref > 0 else 0
+        pct = min(100, fps / ref * 100) if ref > 0 else 0
+
         r.ids.fps_card.value    = f"{fps} FPS"
-        r.ids.fps_card.subtitle = f"Refresh: {ref} Hz"
-        r.ids.fps_card.detail1  = f"GPU Load: {gpu}"
+        r.ids.fps_card.subtitle = f"GPU: {gpu}"
+        r.ids.fps_card.detail1  = f"Refresh: {ref} Hz"
         r.ids.fps_card.bar_pct  = pct
 
+    # ── All stats ─────────────────────────────────────────────────────────
     def _update_stats(self, dt):
         r = self.root_widget
 
-        # CPU - arc = usage%, text shows freq/max
+        # CPU
         cpu = get_cpu()
         mx  = cpu.get("max_freq", 0)
         r.ids.cpu_card.value    = f"{cpu['usage']:.1f}%"
-        r.ids.cpu_card.subtitle = f"{cpu['freq']} / {mx} MHz"
-        r.ids.cpu_card.detail1  = f"{cpu['cores']} Cores  Procs:{cpu['procs']}"
+        r.ids.cpu_card.subtitle = f"{cpu['freq']}/{mx}MHz {cpu['cores']}C"
+        r.ids.cpu_card.detail1  = f"Procs: {cpu['procs']}"
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
         # RAM
         ram_pct, ram_str = get_ram()
         r.ids.ram_card.value    = f"{ram_pct:.1f}%"
         r.ids.ram_card.subtitle = ram_str
+        r.ids.ram_card.detail1  = ""
         r.ids.ram_card.bar_pct  = ram_pct
 
-        # Battery
+        # Battery (no auto-color — use green always for pct)
         b = get_battery()
         r.ids.battery_card.value    = f"{b['pct']}%"
         r.ids.battery_card.subtitle = b['eta']
-        r.ids.battery_card.detail1  = f"{b['current']}  {b['volt']}  {b['power']}"
-        r.ids.battery_card.detail2  = f"Temp:{b['temp']}  {b['status']}"
+        r.ids.battery_card.detail1  = f"{b['current']}  {b['volt']}  Temp:{b['temp']}"
         r.ids.battery_card.bar_pct  = b['pct']
 
         # Network
         net = get_network()
         r.ids.network_card.value    = f"D:{net['dl']}"
         r.ids.network_card.subtitle = f"U: {net['ul']}"
-        r.ids.network_card.detail1  = f"Ping: {net['ping']}  Band: {net['signal']}"
+        r.ids.network_card.detail1  = f"Ping:{net['ping']}  {net['signal']}"
         r.ids.network_card.bar_pct  = 0
 
         # Storage
@@ -119,14 +129,32 @@ class KingwatchApp(App):
         r.ids.storage_card.detail1  = f"Free: {s['free']}"
         r.ids.storage_card.bar_pct  = s['pct']
 
-        # Thermal - throttle warning
-        th     = get_thermal()
-        cpu_t  = th['cpu']
-        throttle = " THROTTLE!" if cpu_t >= 80 else ""
-        r.ids.thermal_card.value    = f"{cpu_t}C"
-        r.ids.thermal_card.subtitle = f"GPU:{th['gpu']}C  Max:{th['max']}C{throttle}"
+        # Thermal — cycles CPU → GPU → Battery every second
+        th   = get_thermal()
+        mode = self._thermal_mode % 3
+        self._thermal_mode += 1
+
+        if mode == 0:
+            temp  = th['cpu']
+            label = f"{temp}C"
+            sub   = "CPU Temp"
+            maxl  = 90
+        elif mode == 1:
+            temp  = th['gpu']
+            label = f"{temp}C"
+            sub   = "GPU Temp"
+            maxl  = 85
+        else:
+            temp  = th.get('batt', 0)
+            label = f"{temp}C"
+            sub   = "Batt Temp"
+            maxl  = 45
+
+        throttle = "  THROTTLE" if th['cpu'] >= 80 else ""
+        r.ids.thermal_card.value    = label
+        r.ids.thermal_card.subtitle = f"{sub}  Max:{th['max']}C{throttle}"
         r.ids.thermal_card.detail1  = th['detail']
-        r.ids.thermal_card.bar_pct  = min(100, (th['max'] / 90) * 100)
+        r.ids.thermal_card.bar_pct  = min(100, (temp / maxl) * 100) if maxl else 0
 
 
 if __name__ == "__main__":
