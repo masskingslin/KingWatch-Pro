@@ -1,24 +1,33 @@
+"""
+KingWatch Pro - core/storage.py
+Internal storage stats via os.statvfs. No psutil.
+"""
 import os
 
 
-def get_storage():
-    """
-    Returns dict:
-        pct   – used % (float)
-        used  – e.g. "42GB"
-        total – e.g. "128GB"
-    """
-    try:
-        s     = os.statvfs("/")
-        total = s.f_blocks * s.f_frsize
-        free  = s.f_bavail * s.f_frsize
-        used  = total - free
-        pct   = round((used / total) * 100, 1) if total else 0
+def _bytes_to_human(b: int) -> str:
+    if b >= 1_000_000_000:
+        return f"{b / 1_000_000_000:.1f} GB"
+    if b >= 1_000_000:
+        return f"{b / 1_000_000:.1f} MB"
+    return f"{b / 1_000:.0f} KB"
 
-        def _gb(b):
-            return f"{b // (1024 ** 3)}GB"
 
-        return {"pct": pct, "used": _gb(used), "total": _gb(total)}
-
-    except Exception:
-        return {"pct": 0, "used": "0GB", "total": "0GB"}
+def get_storage() -> dict:
+    paths = ["/sdcard", "/storage/emulated/0", "/data", "/"]
+    for p in paths:
+        try:
+            stat  = os.statvfs(p)
+            total = stat.f_blocks * stat.f_frsize
+            free  = stat.f_bavail * stat.f_frsize
+            used  = total - free
+            pct   = (used / total * 100) if total > 0 else 0.0
+            return {
+                "pct":   pct,
+                "used":  _bytes_to_human(used),
+                "free":  _bytes_to_human(free),
+                "total": _bytes_to_human(total),
+            }
+        except Exception:
+            continue
+    return {"pct": 0.0, "used": "N/A", "free": "N/A", "total": "N/A"}
