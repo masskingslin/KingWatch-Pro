@@ -7,8 +7,8 @@
     orientation: "vertical"
     size_hint_y: None
     height: self.minimum_height
-    padding: dp(12)
-    spacing: dp(6)
+    padding: [dp(12), dp(10), dp(12), dp(10)]
+    spacing: dp(4)
 
     canvas.before:
         Color:
@@ -18,57 +18,56 @@
             size: self.size
             radius: [dp(14)]
 
-    # Title
+    # Title row
     Label:
         size_hint_y: None
-        height: dp(20)
+        height: dp(18)
         text: root.title.upper()
-        font_size: dp(11)
+        font_size: dp(10)
         bold: True
         color: root.title_color
         halign: "left"
         valign: "middle"
         text_size: self.size
 
-    # Gauge row: arc left, details right
+    # Gauge + details row
     BoxLayout:
         size_hint_y: None
-        height: dp(110)
-        spacing: dp(10)
+        height: dp(100)
+        spacing: dp(12)
 
-        # Circular gauge
         ArcGauge:
             id: gauge
             size_hint_x: None
-            width: dp(110)
-            pct: root.bar_pct
-            arc_color: root.bar_color
-            arc_bg: root.bar_bg
-            label_text: root.value
+            width: dp(100)
+            size_hint_y: 1
+            pct:         root.bar_pct
+            arc_color:   root.bar_color
+            arc_bg:      root.bar_bg
+            label_text:  root.value
             label_color: root.value_color
-            sub_text: ""
-            thickness: dp(9)
+            thickness:   dp(9)
 
-        # Right side: subtitle + details
         BoxLayout:
             orientation: "vertical"
-            spacing: dp(4)
+            spacing: dp(3)
+            padding: [0, dp(8), 0, dp(8)]
 
             Label:
-                id: subtitle_label
                 text: root.subtitle
                 font_size: dp(12)
                 color: root.sub_color
                 halign: "left"
                 valign: "middle"
                 text_size: self.size
+                size_hint_y: 1
 
             Label:
                 size_hint_y: None
-                height: dp(16) if root.detail1 else 0
+                height: dp(15) if root.detail1 else 0
                 opacity: 1 if root.detail1 else 0
                 text: root.detail1
-                font_size: dp(11)
+                font_size: dp(10)
                 color: root.detail_color
                 halign: "left"
                 valign: "middle"
@@ -76,19 +75,17 @@
 
             Label:
                 size_hint_y: None
-                height: dp(16) if root.detail2 else 0
+                height: dp(15) if root.detail2 else 0
                 opacity: 1 if root.detail2 else 0
                 text: root.detail2
-                font_size: dp(11)
+                font_size: dp(10)
                 color: root.detail_color
                 halign: "left"
                 valign: "middle"
                 text_size: self.size
 
-            Widget:
 
-
-# ── Root ───────────────────────────────────────────────────────────────────
+# ── RootWidget ─────────────────────────────────────────────────────────────
 <RootWidget>:
     orientation: "vertical"
 
@@ -96,21 +93,21 @@
         Color:
             rgba: root.bg
         Rectangle:
-            pos: self.pos
+            pos:  self.pos
             size: self.size
 
-    # Header
+    # Header bar
     BoxLayout:
         size_hint_y: None
-        height: dp(52)
-        padding: [dp(14), dp(8)]
+        height: dp(50)
+        padding: [dp(14), dp(7)]
         spacing: dp(8)
 
         canvas.before:
             Color:
                 rgba: root.card_bg
             Rectangle:
-                pos: self.pos
+                pos:  self.pos
                 size: self.size
 
         Label:
@@ -141,85 +138,92 @@
             color: root.text_col
             on_release: root.toggle_collapse()
 
-    # Cards
+    # Scrollable card list
     ScrollView:
-        opacity: 0 if root.collapsed else 1
-        size_hint_y: 0 if root.collapsed else 1
+        opacity:      0 if root.collapsed else 1
+        size_hint_y:  0 if root.collapsed else 1
+        do_scroll_x:  False
 
         GridLayout:
             cols: 1
             size_hint_y: None
             height: self.minimum_height
             spacing: dp(10)
-            padding: dp(10)
+            padding: [dp(10), dp(10), dp(10), dp(10)]
 
             StatCard:
                 id: fps_card
-                title: "FPS / DISPLAY"
-                bg_color: root.card_bg
+                title:       "FPS / DISPLAY"
+                bg_color:    root.card_bg
                 title_color: root.dim_col
-                bar_color: root.accent
-                bar_bg: root.bar_bg
+                bar_color:   root.accent
+                bar_bg:      root.bar_bg
                 value_color: root.accent
-                sub_color: root.sub_col
+                sub_color:   root.sub_col
+                detail_color: root.dim_col
 
             StatCard:
                 id: cpu_card
-                title: "CPU"
-                bg_color: root.card_bg
+                title:       "CPU"
+                bg_color:    root.card_bg
                 title_color: root.dim_col
-                bar_color: root.accent
-                bar_bg: root.bar_bg
+                bar_color:   root.accent
+                bar_bg:      root.bar_bg
                 value_color: root.accent
-                sub_color: root.sub_col
+                sub_color:   root.sub_col
+                detail_color: root.dim_col
 
             StatCard:
                 id: ram_card
-                title: "RAM"
-                bg_color: root.card_bg
+                title:       "RAM"
+                bg_color:    root.card_bg
                 title_color: root.dim_col
-                bar_color: root.accent
-                bar_bg: root.bar_bg
+                bar_color:   root.accent
+                bar_bg:      root.bar_bg
                 value_color: root.accent
-                sub_color: root.sub_col
+                sub_color:   root.sub_col
+                detail_color: root.dim_col
 
             StatCard:
                 id: battery_card
-                title: "BATTERY"
-                bg_color: root.card_bg
+                title:       "BATTERY"
+                bg_color:    root.card_bg
                 title_color: root.dim_col
-                bar_color: root.accent
-                bar_bg: root.bar_bg
+                bar_color:   root.accent
+                bar_bg:      root.bar_bg
                 value_color: root.accent
-                sub_color: root.sub_col
+                sub_color:   root.sub_col
+                detail_color: root.dim_col
 
             StatCard:
                 id: network_card
-                title: "NETWORK"
-                bg_color: root.card_bg
+                title:       "NETWORK"
+                bg_color:    root.card_bg
                 title_color: root.dim_col
-                bar_color: root.accent
-                bar_bg: root.bar_bg
+                bar_color:   root.accent
+                bar_bg:      root.bar_bg
                 value_color: root.accent
-                sub_color: root.sub_col
-                show_bar: False
+                sub_color:   root.sub_col
+                detail_color: root.dim_col
 
             StatCard:
                 id: storage_card
-                title: "STORAGE"
-                bg_color: root.card_bg
+                title:       "STORAGE"
+                bg_color:    root.card_bg
                 title_color: root.dim_col
-                bar_color: root.warn
-                bar_bg: root.bar_bg
+                bar_color:   root.warn
+                bar_bg:      root.bar_bg
                 value_color: root.warn
-                sub_color: root.sub_col
+                sub_color:   root.sub_col
+                detail_color: root.dim_col
 
             StatCard:
                 id: thermal_card
-                title: "THERMAL"
-                bg_color: root.card_bg
+                title:       "THERMAL"
+                bg_color:    root.card_bg
                 title_color: root.dim_col
-                bar_color: root.danger
-                bar_bg: root.bar_bg
+                bar_color:   root.danger
+                bar_bg:      root.bar_bg
                 value_color: root.danger
-                sub_color: root.sub_col
+                sub_color:   root.sub_col
+                detail_color: root.dim_col
