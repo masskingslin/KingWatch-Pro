@@ -1,6 +1,6 @@
 """
 KingWatch Pro v17 - main.py
-KingwatchApp → auto-loads kingwatch.kv (no Builder.load_file)
+KingwatchApp → auto-loads kingwatch.kv once. No Builder.load_file.
 """
 import time as _time
 from kivy.app import App
@@ -76,11 +76,9 @@ class KingwatchApp(App):
         fps = self.monitor.get_fps()
         gpu = self.monitor.get_gpu()
         ref = self.monitor.get_refresh_rate()
-        pct = min(100, (fps / ref * 100)) if ref > 0 else 0
-
+        pct = min(100, fps / ref * 100) if ref > 0 else 0
         r.ids.fps_card.value    = f"{fps} FPS"
         r.ids.fps_card.subtitle = f"Refresh: {ref} Hz"
-        # Only show GPU if available
         r.ids.fps_card.detail1  = f"GPU: {gpu}" if gpu != "N/A" else ""
         r.ids.fps_card.bar_pct  = pct
 
@@ -109,12 +107,13 @@ class KingwatchApp(App):
         r.ids.battery_card.detail1  = f"{b['current']}  {b['volt']}  Temp:{b['temp']}"
         r.ids.battery_card.bar_pct  = b['pct']
 
-        # Network — using TrafficStats API
+        # Network — arc shows download % of band max
         net = get_network()
+        sig = net['signal']
         r.ids.network_card.value    = f"D:{net['dl']}"
-        r.ids.network_card.subtitle = f"U: {net['ul']}"
-        r.ids.network_card.detail1  = f"Ping:{net['ping']}  {net['signal']}"
-        r.ids.network_card.bar_pct  = 0
+        r.ids.network_card.subtitle = f"U: {net['ul']}  {sig}"
+        r.ids.network_card.detail1  = f"Ping: {net['ping']}"
+        r.ids.network_card.bar_pct  = net['arc_pct']
 
         # Storage
         s = get_storage()
@@ -123,11 +122,10 @@ class KingwatchApp(App):
         r.ids.storage_card.detail1  = f"Free: {s['free']}"
         r.ids.storage_card.bar_pct  = s['pct']
 
-        # Thermal — cycles CPU → GPU → Battery each second
+        # Thermal — cycles CPU → GPU → Battery
         th   = get_thermal()
         mode = self._thermal_mode % 3
         self._thermal_mode += 1
-
         if mode == 0:
             t, lbl, maxl = th['cpu'],  "CPU",  90.0
         elif mode == 1:
@@ -135,11 +133,11 @@ class KingwatchApp(App):
         else:
             t, lbl, maxl = th['batt'], "Batt", 45.0
 
-        warn = "  ⚠THROTTLE" if th['cpu'] >= 80 else ""
+        warn = "  THROTTLE!" if th['cpu'] >= 80 else ""
         r.ids.thermal_card.value    = f"{t}C"
         r.ids.thermal_card.subtitle = f"{lbl}  Max:{th['max']}C{warn}"
         r.ids.thermal_card.detail1  = th['detail']
-        r.ids.thermal_card.bar_pct  = min(100, (t / maxl * 100)) if maxl else 0
+        r.ids.thermal_card.bar_pct  = min(100, t / maxl * 100) if maxl else 0
 
 
 if __name__ == "__main__":
