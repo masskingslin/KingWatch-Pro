@@ -1,116 +1,106 @@
 """
-KingWatch Pro - core/fps.py
-Native FPS counter and display refresh rate detector.
-No psutil. Uses Kivy Clock + Android WindowManager via pyjnius.
+KingWatch Pro v17 - core/fps.py
+FPS counter + GPU load (Adreno/Mali/PowerVR) + refresh rate.
 """
 import time
+import glob
 from kivy.clock import Clock
 
 
 class PerformanceMonitor:
-    """
-    Tracks Kivy-rendered FPS using a rolling frame-time window,
-    and reads the display refresh rate from Android WindowManager.
-    """
-
-    WINDOW_SIZE = 30  # frames to average
+    WINDOW = 30
 
     def __init__(self):
-        self._frame_times = []
-        self._last_time   = time.perf_counter()
-        self._cached_refresh = self._detect_refresh_rate()
-        # Hook into every Kivy frame
+        self._frames   = []
+        self._last     = time.perf_counter()
+        self._refresh  = self._detect_refresh()
         Clock.schedule_interval(self._tick, 0)
 
-    # ------------------------------------------------------------------ #
-    #  Internal frame ticker                                               #
-    # ------------------------------------------------------------------ #
     def _tick(self, dt):
         now = time.perf_counter()
-        delta = now - self._last_time
-        self._last_time = now
-        if delta > 0:
-            self._frame_times.append(delta)
-            if len(self._frame_times) > self.WINDOW_SIZE:
-                self._frame_times.pop(0)
+        d   = now - self._last
+        self._last = now
+        if 0 < d < 1.0:
+            self._frames.append(d)
+            if len(self._frames) > self.WINDOW:
+                self._frames.pop(0)
 
-    # ------------------------------------------------------------------ #
-    #  Public API                                                          #
-    # ------------------------------------------------------------------ #
     def get_fps(self) -> int:
-        """Return smoothed FPS as integer."""
-        if len(self._frame_times) < 2:
+        if len(self._frames) < 2:
             return 0
-        avg_dt = sum(self._frame_times) / len(self._frame_times)
-        return int(round(1.0 / avg_dt)) if avg_dt > 0 else 0
+        avg = sum(self._frames) / len(self._frames)
+        return int(round(1.0 / avg)) if avg > 0 else 0
 
     def get_gpu(self) -> str:
-        """
-        Return GPU load string.
-        On Android, /sys/class/kgsl/kgsl-3d0/gpu_busy_percentage gives
-        Adreno load. Falls back to 'N/A' on other devices.
-        """
-        paths = [
-            "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",   # Qualcomm Adreno
-            "/sys/kernel/gpu/gpu_busy",                        # some Mali
-            "/sys/devices/platform/mali/utilization",          # older Mali
-        ]
-        for p in paths:
+        # Qualcomm Adreno
+        for p in ("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+                  "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_load"):
             try:
                 with open(p) as f:
-                    val = f.read().strip().split()[0]
-                    return f"{val}%"
+                    v = f.read().strip().split()[0]
+                    return f"{v}%"
+            except Exception:
+                continue
+        # ARM Mali
+        for p in glob.glob("/sys/devices/platform/*/utilization") + \
+                 glob.glob("/sys/kernel/gpu/gpu_busy") + \
+                 glob.glob("/sys/class/misc/mali*/device/utilization"):
+            try:
+                with open(p) as f:
+                    v = f.read().strip()
+                    return f"{v}%"
+            except Exception:
+                continue
+        # MediaTek GPU
+        for p in ("/proc/gpufreq/gpufreq_var_dump",
+                  "/sys/kernel/ged/hal/gpu_utilization"):
+            try:
+                with open(p) as f:
+                    for line in f:
+                        if "util" in line.lower() or "loading" in line.lower():
+                            parts = line.split()
+                            for part in parts:
+                                try:
+                                    v = int(part.strip("%"))
+                                    if 0 <= v <= 100:
+                                        return f"{v}%"
+                                except Exception:
+                                    pass
             except Exception:
                 continue
         return "N/A"
 
     def get_refresh_rate(self) -> int:
-        """Return display refresh rate in Hz (cached, re-reads every 30s)."""
-        return self._cached_refresh
+        return self._refresh
 
-    # ------------------------------------------------------------------ #
-    #  Refresh rate detection (Android WindowManager / /sys fallback)     #
-    # ------------------------------------------------------------------ #
-    def _detect_refresh_rate(self) -> int:
-        # 1. Try pyjnius -> Android WindowManager (most accurate)
+    def _detect_refresh(self) -> int:
+        # 1. Android WindowManager (most accurate)
         try:
-            from jnius import autoclass  # type: ignore
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            activity = PythonActivity.mActivity
-            wm = activity.getWindowManager()
-            display = wm.getDefaultDisplay()
-            rate = display.getRefreshRate()
-            return int(round(rate))
+            from jnius import autoclass
+            act  = autoclass("org.kivy.android.PythonActivity").mActivity
+            disp = act.getWindowManager().getDefaultDisplay()
+            return int(round(disp.getRefreshRate()))
         except Exception:
             pass
-
-        # 2. Try /sys/class/graphics/fb0/modes  (e.g. "U:1080x2340p-90")
+        # 2. /sys/class/graphics/fb0/modes
         try:
             with open("/sys/class/graphics/fb0/modes") as f:
-                line = f.readline().strip()
-                # last token after '-' is refresh rate
-                rate = int(line.rsplit("-", 1)[-1])
-                if 20 <= rate <= 240:
-                    return rate
+                r = int(f.readline().strip().rsplit("-", 1)[-1])
+                if 20 <= r <= 240:
+                    return r
         except Exception:
             pass
-
-        # 3. Try /sys/class/drm/card0-DSI-1/modes
+        # 3. DRM modes
         try:
-            import glob
             for path in glob.glob("/sys/class/drm/card*/*/modes"):
                 with open(path) as f:
                     for line in f:
-                        parts = line.strip().split("x")
-                        if len(parts) == 2:
-                            try:
-                                rate = int(parts[1].split("@")[1].split(".")[0])
-                                if 20 <= rate <= 240:
-                                    return rate
-                            except Exception:
-                                continue
+                        try:
+                            r = int(line.strip().split("@")[1].split(".")[0])
+                            if 20 <= r <= 240:
+                                return r
+                        except Exception:
+                            pass
         except Exception:
             pass
-
-        # 4. Default fallback
         return 60
