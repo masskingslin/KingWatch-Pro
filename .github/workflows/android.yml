@@ -100,4 +100,3 @@ jobs:
         with:
           name: KingWatch-Pro-debug
           path: bin/*.apk
-          retention-days: 30
