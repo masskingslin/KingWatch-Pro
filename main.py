@@ -1,6 +1,6 @@
 """
 KingWatch Pro v17 - main.py
-KingwatchApp → auto-loads kingwatch.kv. No Builder.load_file.
+KingwatchApp → Kivy auto-loads kingwatch.kv. No Builder.load_file.
 """
 import time as _time
 from kivy.app import App
@@ -109,13 +109,15 @@ class KingwatchApp(App):
         )
         r.ids.battery_card.bar_pct  = b['pct']
 
-        # Network — arc = download % of band theoretical max
+        # Network
+        # Arc = download % of band theoretical max
+        # Value  = download speed
+        # Sub    = upload speed
+        # Detail = band (4G/5G/WiFi) + ping
         net = get_network()
-        # subtitle: "D: 2KB/s  U: 1KB/s"
-        # detail:   "4G LTE  Ping: 45ms"
         r.ids.network_card.value    = net['dl']
         r.ids.network_card.subtitle = f"Up: {net['ul']}"
-        r.ids.network_card.detail1  = f"{net['signal']}  {net['ping']}"
+        r.ids.network_card.detail1  = f"{net['signal']}  Ping:{net['ping']}"
         r.ids.network_card.bar_pct  = net['arc_pct']
 
         # Storage
@@ -125,7 +127,7 @@ class KingwatchApp(App):
         r.ids.storage_card.detail1  = f"Free: {s['free']}"
         r.ids.storage_card.bar_pct  = s['pct']
 
-        # Thermal — cycles CPU → GPU → Battery
+        # Thermal — cycles CPU → GPU → Battery each second
         th   = get_thermal()
         mode = self._thermal_mode % 3
         self._thermal_mode += 1
@@ -135,7 +137,6 @@ class KingwatchApp(App):
             t, lbl, maxl = th['gpu'],  "GPU",  85.0
         else:
             t, lbl, maxl = th['batt'], "Batt", 45.0
-
         warn = "  THROTTLE!" if th['cpu'] >= 80 else ""
         r.ids.thermal_card.value    = f"{t}C"
         r.ids.thermal_card.subtitle = f"{lbl}  Max:{th['max']}C{warn}"
