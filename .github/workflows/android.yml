@@ -28,11 +28,10 @@ jobs:
             autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             libtinfo5 cmake libffi-dev libssl-dev \
-            build-essential ccache rsync
+            build-essential ccache
 
       - name: Force Java 17
         run: |
-          sudo update-java-alternatives -s java-1.17.0-openjdk-amd64 || true
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
           echo "/usr/lib/jvm/java-17-openjdk-amd64/bin"       >> $GITHUB_PATH
 
@@ -49,10 +48,6 @@ jobs:
           restore-keys: |
             buildozer-${{ runner.os }}-
 
-      # ── THE FIX ────────────────────────────────────────────────────────────
-      # Buildozer HARDCODES the check to:
-      #   ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-      # No env var, no spec setting changes this. We must put real SDK there.
       - name: Install Android SDK at Buildozer hardcoded path
         run: |
           SDK=$HOME/.buildozer/android/platform/android-sdk
@@ -62,27 +57,29 @@ jobs:
             https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
             -O /tmp/cmdline-tools.zip
           unzip -q /tmp/cmdline-tools.zip -d /tmp/ct-raw
+
+          # Remove existing dir first (fixes cache-restore conflict)
+          rm -rf $SDK/cmdline-tools/latest
           mv /tmp/ct-raw/cmdline-tools $SDK/cmdline-tools/latest
 
           SDKMGR=$SDK/cmdline-tools/latest/bin/sdkmanager
 
-          # Accept all licences silently
           yes | $SDKMGR --licenses > /dev/null 2>&1 || true
 
-          # Install SDK packages — use 34.0.0 NOT rc2 (rc2 requires manual licence accept)
           $SDKMGR \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;34.0.0" \
             "ndk;25.1.8937393"
 
-          # Create legacy shim — this is the exact path Buildozer checks
+          # Legacy shim Buildozer hardcodes a check for
           mkdir -p $SDK/tools/bin
           printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$SDKMGR" \
             > $SDK/tools/bin/sdkmanager
           chmod +x $SDK/tools/bin/sdkmanager
 
-          # Symlink NDK to the name buildozer.spec expects: ndk/25b
+          # Symlink NDK name to match buildozer.spec
+          rm -f $SDK/ndk/25b
           ln -sfn $SDK/ndk/25.1.8937393 $SDK/ndk/25b
 
           echo "ANDROID_SDK_ROOT=$SDK" >> $GITHUB_ENV
@@ -93,10 +90,9 @@ jobs:
 
       - name: Verify SDK setup
         run: |
-          echo "=== sdkmanager shim ===" && cat $ANDROID_SDK_ROOT/tools/bin/sdkmanager
-          echo "=== NDK symlink ===" && ls -la $ANDROID_SDK_ROOT/ndk/
+          echo "=== shim ===" && cat $ANDROID_SDK_ROOT/tools/bin/sdkmanager
+          echo "=== NDK ===" && ls -la $ANDROID_SDK_ROOT/ndk/
           echo "=== build-tools ===" && ls $ANDROID_SDK_ROOT/build-tools/
-          $ANDROID_SDK_ROOT/tools/bin/sdkmanager --list 2>/dev/null | grep "Installed" | head -10
 
       - name: Build debug APK
         run: buildozer android debug
