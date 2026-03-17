@@ -121,7 +121,7 @@
                 size: self.size
 
         Label:
-            text: "⚡ KingWatch Pro v15"
+            text: "KingWatch Pro v16"
             font_size: dp(15)
             bold: True
             color: root.text_col
@@ -130,22 +130,22 @@
             text_size: self.size
             size_hint_x: 1
 
-        # Theme cycle button ◑
+        # Theme cycle button
         Button:
-            text: "◑"
+            text: "Theme"
             size_hint: None, None
-            size: dp(36), dp(36)
-            font_size: dp(18)
+            size: dp(60), dp(36)
+            font_size: dp(12)
             background_color: root.accent
             color: 0, 0, 0, 1
             on_release: root.cycle_theme()
 
-        # Collapse toggle _
+        # Collapse toggle
         Button:
-            text: "_"
+            text: "Hide"
             size_hint: None, None
-            size: dp(36), dp(36)
-            font_size: dp(18)
+            size: dp(48), dp(36)
+            font_size: dp(12)
             background_color: root.dim_col
             color: root.text_col
             on_release: root.toggle_collapse()
@@ -161,6 +161,14 @@
             height: self.minimum_height
             spacing: dp(10)
             padding: dp(10)
+
+            StatCard:
+                id: fps_card
+                title: "FPS / DISPLAY"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.accent
+                value_color: root.accent
 
             StatCard:
                 id: cpu_card
@@ -180,7 +188,7 @@
 
             StatCard:
                 id: storage_card
-                title: "Storage"
+                title: "STORAGE"
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.warn
@@ -188,7 +196,7 @@
 
             StatCard:
                 id: battery_card
-                title: "Battery"
+                title: "BATTERY"
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.accent
@@ -196,7 +204,7 @@
 
             StatCard:
                 id: network_card
-                title: "Network"
+                title: "NETWORK"
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 show_bar: False
@@ -204,16 +212,8 @@
 
             StatCard:
                 id: thermal_card
-                title: "Thermal"
+                title: "THERMAL"
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.danger
                 value_color: root.danger
-
-            StatCard:
-                id: fps_card
-                title: "FPS"
-                bg_color: root.card_bg
-                title_color: root.dim_col
-                bar_color: root.accent
-                value_color: root.accent
