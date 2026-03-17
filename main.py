@@ -1,8 +1,12 @@
+"""
+KingWatch Pro v16 - main.py
+Upgraded: native FPS + refresh rate, no psutil, no emoji.
+"""
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import ListProperty, BooleanProperty
+from kivy.properties import ListProperty, BooleanProperty, NumericProperty
 
 from core.fps import PerformanceMonitor
 from core.cpu import get_cpu
@@ -25,7 +29,6 @@ class RootWidget(BoxLayout):
     text_col  = ListProperty([1,   1,   1,    1])
     dim_col   = ListProperty([0.33,0.33,0.33, 1])
     collapsed = BooleanProperty(False)
-
     theme_index = 0
 
     def apply_theme(self, name):
@@ -57,34 +60,40 @@ class KingWatchApp(App):
         self.monitor = PerformanceMonitor()
         self.root_widget = RootWidget()
         self.root_widget.apply_theme("Dark Pro")
-        Clock.schedule_interval(self.update_stats, 1)
+        # Fast tick: 0.5s for FPS accuracy; other stats at 1s
+        Clock.schedule_interval(self.update_fps_fast, 0.5)
+        Clock.schedule_interval(self.update_stats, 1.0)
         return self.root_widget
+
+    def update_fps_fast(self, dt):
+        """Update FPS and refresh rate at 0.5s cadence for responsiveness."""
+        r = self.root_widget
+        fps      = self.monitor.get_fps()
+        gpu      = self.monitor.get_gpu()
+        ref_rate = self.monitor.get_refresh_rate()
+
+        r.ids.fps_card.value    = f"{fps} FPS"
+        r.ids.fps_card.subtitle = f"GPU Load: {gpu}  |  Refresh: {ref_rate} Hz"
+        r.ids.fps_card.bar_pct  = min(100, (fps / ref_rate) * 100) if ref_rate > 0 else 0
 
     def update_stats(self, dt):
         r = self.root_widget
 
-        # â”€â”€ FPS / GPU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        fps = self.monitor.get_fps()
-        gpu = self.monitor.get_gpu()
-        r.ids.fps_card.value    = str(fps)
-        r.ids.fps_card.subtitle = f"GPU Load: {gpu}"
-        r.ids.fps_card.bar_pct  = min(100, (fps / 60) * 100)
-
-        # â”€â”€ CPU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- CPU --
         cpu = get_cpu()
         r.ids.cpu_card.value    = f"{cpu['usage']:.1f}%"
         r.ids.cpu_card.subtitle = f"{cpu['freq']} MHz  |  {cpu['cores']} Cores"
         r.ids.cpu_card.detail1  = f"Processes: {cpu['procs']}"
-        r.ids.cpu_card.detail2  = "[sys-wide]"
+        r.ids.cpu_card.detail2  = ""
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
-        # â”€â”€ RAM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- RAM --
         ram_pct, ram_str = get_ram()
         r.ids.ram_card.value    = f"{ram_pct:.1f}%"
         r.ids.ram_card.subtitle = ram_str
         r.ids.ram_card.bar_pct  = ram_pct
 
-        # â”€â”€ Battery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Battery --
         batt = get_battery()
         r.ids.battery_card.value    = f"{batt['pct']}%"
         r.ids.battery_card.subtitle = batt['eta']
@@ -92,23 +101,23 @@ class KingWatchApp(App):
         r.ids.battery_card.detail2  = f"Temp: {batt['temp']}"
         r.ids.battery_card.bar_pct  = batt['pct']
 
-        # â”€â”€ Network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Network --
         net = get_network()
-        r.ids.network_card.value    = f"â†“ {net['dl']}"
-        r.ids.network_card.subtitle = f"â†‘ {net['ul']}"
+        r.ids.network_card.value    = f"Down: {net['dl']}"
+        r.ids.network_card.subtitle = f"Up:   {net['ul']}"
         r.ids.network_card.detail1  = f"Ping: {net['ping']}   {net['signal']}"
         r.ids.network_card.show_bar = False
 
-        # â”€â”€ Storage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Storage --
         storage = get_storage()
         r.ids.storage_card.value    = f"{storage['pct']:.1f}%"
         r.ids.storage_card.subtitle = f"{storage['used']} / {storage['total']}"
         r.ids.storage_card.bar_pct  = storage['pct']
 
-        # â”€â”€ Thermal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Thermal --
         therm = get_thermal()
-        r.ids.thermal_card.value    = f"{therm['cpu']}Â°C"
-        r.ids.thermal_card.subtitle = f"Max: {therm['max']}Â°C"
+        r.ids.thermal_card.value    = f"{therm['cpu']}C"
+        r.ids.thermal_card.subtitle = f"Max: {therm['max']}C"
         r.ids.thermal_card.detail1  = therm['detail']
         r.ids.thermal_card.bar_pct  = min(100, (therm['max'] / 90) * 100)
 
