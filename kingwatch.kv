@@ -1,12 +1,13 @@
+#:import ArcGauge ui.widgets.ArcGauge
 #:import StatCard ui.widgets.StatCard
 #:import dp kivy.metrics.dp
 
-# ── StatCard template ──────────────────────────────────────────────────────
+# ── StatCard ───────────────────────────────────────────────────────────────
 <StatCard>:
     orientation: "vertical"
     size_hint_y: None
     height: self.minimum_height
-    padding: dp(10)
+    padding: dp(12)
     spacing: dp(6)
 
     canvas.before:
@@ -15,87 +16,79 @@
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [dp(12)]
+            radius: [dp(14)]
 
-    # Title row
-    BoxLayout:
-        size_hint_y: None
-        height: dp(22)
-        Label:
-            text: root.title.upper()
-            font_size: dp(11)
-            color: root.title_color
-            halign: "left"
-            valign: "middle"
-            text_size: self.size
-            bold: True
-
-    # Value + subtitle
-    BoxLayout:
-        size_hint_y: None
-        height: dp(44)
-        orientation: "vertical"
-        Label:
-            id: value_label
-            text: root.value
-            font_size: dp(26)
-            bold: True
-            color: root.value_color
-            halign: "left"
-            valign: "bottom"
-            text_size: self.size
-        Label:
-            id: subtitle_label
-            text: root.subtitle
-            font_size: dp(11)
-            color: root.sub_color
-            halign: "left"
-            valign: "top"
-            text_size: self.size
-
-    # Progress bar (optional)
-    BoxLayout:
-        size_hint_y: None
-        height: dp(8) if root.show_bar else 0
-        opacity: 1 if root.show_bar else 0
-        canvas.before:
-            Color:
-                rgba: root.bar_bg
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [dp(4)]
-            Color:
-                rgba: root.bar_color
-            RoundedRectangle:
-                pos: self.pos
-                size: (self.width * min(1, root.bar_pct / 100), self.height)
-                radius: [dp(4)]
-
-    # Detail rows
+    # Title
     Label:
         size_hint_y: None
-        height: dp(16) if root.detail1 else 0
-        opacity: 1 if root.detail1 else 0
-        text: root.detail1
-        font_size: dp(10)
-        color: root.detail_color
-        halign: "left"
-        valign: "middle"
-        text_size: self.size
-    Label:
-        size_hint_y: None
-        height: dp(16) if root.detail2 else 0
-        opacity: 1 if root.detail2 else 0
-        text: root.detail2
-        font_size: dp(10)
-        color: root.detail_color
+        height: dp(20)
+        text: root.title.upper()
+        font_size: dp(11)
+        bold: True
+        color: root.title_color
         halign: "left"
         valign: "middle"
         text_size: self.size
 
+    # Gauge row: arc left, details right
+    BoxLayout:
+        size_hint_y: None
+        height: dp(110)
+        spacing: dp(10)
 
-# ── Root layout ────────────────────────────────────────────────────────────
+        # Circular gauge
+        ArcGauge:
+            id: gauge
+            size_hint_x: None
+            width: dp(110)
+            pct: root.bar_pct
+            arc_color: root.bar_color
+            arc_bg: root.bar_bg
+            label_text: root.value
+            label_color: root.value_color
+            sub_text: ""
+            thickness: dp(9)
+
+        # Right side: subtitle + details
+        BoxLayout:
+            orientation: "vertical"
+            spacing: dp(4)
+
+            Label:
+                id: subtitle_label
+                text: root.subtitle
+                font_size: dp(12)
+                color: root.sub_color
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+
+            Label:
+                size_hint_y: None
+                height: dp(16) if root.detail1 else 0
+                opacity: 1 if root.detail1 else 0
+                text: root.detail1
+                font_size: dp(11)
+                color: root.detail_color
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+
+            Label:
+                size_hint_y: None
+                height: dp(16) if root.detail2 else 0
+                opacity: 1 if root.detail2 else 0
+                text: root.detail2
+                font_size: dp(11)
+                color: root.detail_color
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+
+            Widget:
+
+
+# ── Root ───────────────────────────────────────────────────────────────────
 <RootWidget>:
     orientation: "vertical"
 
@@ -106,11 +99,11 @@
             pos: self.pos
             size: self.size
 
-    # ── Header bar ──────────────────────────────────────────────────────
+    # Header
     BoxLayout:
         size_hint_y: None
         height: dp(52)
-        padding: [dp(12), dp(8)]
+        padding: [dp(14), dp(8)]
         spacing: dp(8)
 
         canvas.before:
@@ -121,7 +114,7 @@
                 size: self.size
 
         Label:
-            text: "KingWatch Pro v16"
+            text: "KingWatch Pro v17"
             font_size: dp(15)
             bold: True
             color: root.text_col
@@ -130,27 +123,25 @@
             text_size: self.size
             size_hint_x: 1
 
-        # Theme cycle button
         Button:
             text: "Theme"
             size_hint: None, None
-            size: dp(60), dp(36)
+            size: dp(64), dp(36)
             font_size: dp(12)
             background_color: root.accent
             color: 0, 0, 0, 1
             on_release: root.cycle_theme()
 
-        # Collapse toggle
         Button:
             text: "Hide"
             size_hint: None, None
-            size: dp(48), dp(36)
+            size: dp(52), dp(36)
             font_size: dp(12)
             background_color: root.dim_col
             color: root.text_col
             on_release: root.toggle_collapse()
 
-    # ── Stat cards (hidden when collapsed) ──────────────────────────────
+    # Cards
     ScrollView:
         opacity: 0 if root.collapsed else 1
         size_hint_y: 0 if root.collapsed else 1
@@ -168,7 +159,9 @@
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.accent
+                bar_bg: root.bar_bg
                 value_color: root.accent
+                sub_color: root.sub_col
 
             StatCard:
                 id: cpu_card
@@ -176,7 +169,9 @@
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.accent
+                bar_bg: root.bar_bg
                 value_color: root.accent
+                sub_color: root.sub_col
 
             StatCard:
                 id: ram_card
@@ -184,15 +179,9 @@
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.accent
+                bar_bg: root.bar_bg
                 value_color: root.accent
-
-            StatCard:
-                id: storage_card
-                title: "STORAGE"
-                bg_color: root.card_bg
-                title_color: root.dim_col
-                bar_color: root.warn
-                value_color: root.warn
+                sub_color: root.sub_col
 
             StatCard:
                 id: battery_card
@@ -200,15 +189,30 @@
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.accent
+                bar_bg: root.bar_bg
                 value_color: root.accent
+                sub_color: root.sub_col
 
             StatCard:
                 id: network_card
                 title: "NETWORK"
                 bg_color: root.card_bg
                 title_color: root.dim_col
-                show_bar: False
+                bar_color: root.accent
+                bar_bg: root.bar_bg
                 value_color: root.accent
+                sub_color: root.sub_col
+                show_bar: False
+
+            StatCard:
+                id: storage_card
+                title: "STORAGE"
+                bg_color: root.card_bg
+                title_color: root.dim_col
+                bar_color: root.warn
+                bar_bg: root.bar_bg
+                value_color: root.warn
+                sub_color: root.sub_col
 
             StatCard:
                 id: thermal_card
@@ -216,4 +220,6 @@
                 bg_color: root.card_bg
                 title_color: root.dim_col
                 bar_color: root.danger
+                bar_bg: root.bar_bg
                 value_color: root.danger
+                sub_color: root.sub_col
