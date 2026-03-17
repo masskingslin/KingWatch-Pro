@@ -1,12 +1,21 @@
 """
 KingWatch Pro v17 - main.py
+
+ROOT CAUSE OF DOUBLE RENDER FIXED:
+  Kivy auto-loads a KV file named after the app class (kingwatchapp.kv or
+  kingwatch.kv). Having Builder.load_file() AND the auto-load causes every
+  widget rule to be registered twice → two complete UIs rendered.
+
+  FIX: Rename App class to avoid auto-KV-load, OR suppress it via
+  kv_file = '' and load manually. We use kv_file = '' approach.
 """
+import time as _time
+
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import ListProperty, BooleanProperty, StringProperty
-import time as _time
 
 from core.fps import PerformanceMonitor
 from core.cpu import get_cpu
@@ -16,8 +25,6 @@ from core.network import get_network
 from core.storage import get_storage
 from core.thermal import get_thermal
 from themes import THEME_NAMES, get_theme
-
-Builder.load_file("kingwatch.kv")
 
 
 class RootWidget(BoxLayout):
@@ -59,14 +66,20 @@ class RootWidget(BoxLayout):
 
 
 class KingWatchApp(App):
+    # Prevent Kivy from auto-loading kingwatch.kv a second time
+    kv_file = ""
 
     def build(self):
+        # Load KV manually — exactly once
+        Builder.load_file("kingwatch.kv")
+
         self.monitor = PerformanceMonitor()
         self.root_widget = RootWidget()
         self.root_widget.apply_theme("Dark Pro")
-        Clock.schedule_once(self._populate, 0)
-        Clock.schedule_interval(self._update_fps,   0.5)
-        Clock.schedule_interval(self._update_stats, 1.0)
+
+        Clock.schedule_once(self._populate, 0.1)
+        Clock.schedule_interval(self._update_fps,        0.5)
+        Clock.schedule_interval(self._update_stats,      1.0)
         Clock.schedule_interval(self.root_widget.tick_clock, 1.0)
         return self.root_widget
 
@@ -89,17 +102,20 @@ class KingWatchApp(App):
     def _update_stats(self, dt):
         r = self.root_widget
 
+        # CPU
         cpu = get_cpu()
         r.ids.cpu_card.value    = f"{cpu['usage']:.1f}%"
         r.ids.cpu_card.subtitle = f"{cpu['freq']} MHz  |  {cpu['cores']} Cores"
         r.ids.cpu_card.detail1  = f"Processes: {cpu['procs']}"
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
+        # RAM
         ram_pct, ram_str = get_ram()
         r.ids.ram_card.value    = f"{ram_pct:.1f}%"
         r.ids.ram_card.subtitle = ram_str
         r.ids.ram_card.bar_pct  = ram_pct
 
+        # Battery
         b = get_battery()
         r.ids.battery_card.value    = f"{b['pct']}%"
         r.ids.battery_card.subtitle = b['eta']
@@ -107,21 +123,24 @@ class KingWatchApp(App):
         r.ids.battery_card.detail2  = f"Temp: {b['temp']}  [{b['status']}]"
         r.ids.battery_card.bar_pct  = b['pct']
 
+        # Network
         net = get_network()
         r.ids.network_card.value    = f"D:{net['dl']}"
         r.ids.network_card.subtitle = f"U:{net['ul']}"
-        r.ids.network_card.detail1  = f"Ping: {net['ping']}   Band: {net['signal']}"
+        r.ids.network_card.detail1  = f"Ping:{net['ping']}  {net['signal']}"
         r.ids.network_card.bar_pct  = 0
 
+        # Storage
         s = get_storage()
         r.ids.storage_card.value    = f"{s['pct']:.1f}%"
         r.ids.storage_card.subtitle = f"{s['used']} / {s['total']}"
         r.ids.storage_card.detail1  = f"Free: {s['free']}"
         r.ids.storage_card.bar_pct  = s['pct']
 
+        # Thermal
         th = get_thermal()
         r.ids.thermal_card.value    = f"{th['cpu']}C"
-        r.ids.thermal_card.subtitle = f"GPU: {th['gpu']}C  Max: {th['max']}C"
+        r.ids.thermal_card.subtitle = f"GPU:{th['gpu']}C  Max:{th['max']}C"
         r.ids.thermal_card.detail1  = th['detail']
         r.ids.thermal_card.bar_pct  = min(100, (th['max'] / 90) * 100)
 
