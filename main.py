@@ -1,12 +1,15 @@
 """
-KingWatch Pro v16 - main.py
-Upgraded: native FPS + refresh rate, no psutil, no emoji.
+KingWatch Pro v17 - main.py
+Fixes:
+  - Single Builder.load_file (was called twice causing double render)
+  - Instant data population on build() - no -- dashes on first frame
+  - Circular ArcGauge replacing flat progress bars
 """
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import ListProperty, BooleanProperty, NumericProperty
+from kivy.properties import ListProperty, BooleanProperty
 
 from core.fps import PerformanceMonitor
 from core.cpu import get_cpu
@@ -17,6 +20,7 @@ from core.storage import get_storage
 from core.thermal import get_thermal
 from themes import THEME_NAMES, get_theme
 
+# Load KV exactly ONCE here - never call Builder.load_file again anywhere
 Builder.load_file("kingwatch.kv")
 
 
@@ -28,16 +32,16 @@ class RootWidget(BoxLayout):
     danger    = ListProperty([1.0, 0.09, 0.27, 1])
     text_col  = ListProperty([1,   1,   1,    1])
     dim_col   = ListProperty([0.33,0.33,0.33, 1])
+    sub_col   = ListProperty([0.55,0.55,0.55, 1])
+    bar_bg    = ListProperty([0.18,0.18,0.18, 1])
     collapsed = BooleanProperty(False)
     theme_index = 0
 
     def apply_theme(self, name):
         t = get_theme(name)
-
-        def h(hex_str):
-            hx = hex_str.lstrip("#")
+        def h(hx):
+            hx = hx.lstrip("#")
             return [int(hx[i:i+2], 16) / 255 for i in (0, 2, 4)] + [1]
-
         self.bg       = h(t["BG"])
         self.card_bg  = h(t["CARD"])
         self.accent   = h(t["ACCENT"])
@@ -60,40 +64,48 @@ class KingWatchApp(App):
         self.monitor = PerformanceMonitor()
         self.root_widget = RootWidget()
         self.root_widget.apply_theme("Dark Pro")
-        # Fast tick: 0.5s for FPS accuracy; other stats at 1s
-        Clock.schedule_interval(self.update_fps_fast, 0.5)
+
+        # Populate all stats immediately so no "--" shows on first frame
+        Clock.schedule_once(self._first_populate, 0)
+
+        # Ongoing ticks
+        Clock.schedule_interval(self.update_fps,   0.5)
         Clock.schedule_interval(self.update_stats, 1.0)
         return self.root_widget
 
-    def update_fps_fast(self, dt):
-        """Update FPS and refresh rate at 0.5s cadence for responsiveness."""
-        r = self.root_widget
+    def _first_populate(self, dt):
+        """Called on the very first frame - fills all cards instantly."""
+        self.update_fps(0)
+        self.update_stats(0)
+
+    def update_fps(self, dt):
+        r        = self.root_widget
         fps      = self.monitor.get_fps()
         gpu      = self.monitor.get_gpu()
         ref_rate = self.monitor.get_refresh_rate()
+        pct      = min(100, (fps / ref_rate) * 100) if ref_rate > 0 else 0
 
         r.ids.fps_card.value    = f"{fps} FPS"
-        r.ids.fps_card.subtitle = f"GPU Load: {gpu}  |  Refresh: {ref_rate} Hz"
-        r.ids.fps_card.bar_pct  = min(100, (fps / ref_rate) * 100) if ref_rate > 0 else 0
+        r.ids.fps_card.subtitle = f"GPU: {gpu}  |  Refresh: {ref_rate} Hz"
+        r.ids.fps_card.bar_pct  = pct
 
     def update_stats(self, dt):
         r = self.root_widget
 
-        # -- CPU --
+        # CPU
         cpu = get_cpu()
         r.ids.cpu_card.value    = f"{cpu['usage']:.1f}%"
         r.ids.cpu_card.subtitle = f"{cpu['freq']} MHz  |  {cpu['cores']} Cores"
         r.ids.cpu_card.detail1  = f"Processes: {cpu['procs']}"
-        r.ids.cpu_card.detail2  = ""
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
-        # -- RAM --
+        # RAM
         ram_pct, ram_str = get_ram()
         r.ids.ram_card.value    = f"{ram_pct:.1f}%"
         r.ids.ram_card.subtitle = ram_str
         r.ids.ram_card.bar_pct  = ram_pct
 
-        # -- Battery --
+        # Battery
         batt = get_battery()
         r.ids.battery_card.value    = f"{batt['pct']}%"
         r.ids.battery_card.subtitle = batt['eta']
@@ -101,20 +113,20 @@ class KingWatchApp(App):
         r.ids.battery_card.detail2  = f"Temp: {batt['temp']}"
         r.ids.battery_card.bar_pct  = batt['pct']
 
-        # -- Network --
+        # Network
         net = get_network()
-        r.ids.network_card.value    = f"Down: {net['dl']}"
-        r.ids.network_card.subtitle = f"Up:   {net['ul']}"
+        r.ids.network_card.value    = f"D: {net['dl']}"
+        r.ids.network_card.subtitle = f"U: {net['ul']}"
         r.ids.network_card.detail1  = f"Ping: {net['ping']}   {net['signal']}"
-        r.ids.network_card.show_bar = False
+        r.ids.network_card.bar_pct  = 0
 
-        # -- Storage --
+        # Storage
         storage = get_storage()
         r.ids.storage_card.value    = f"{storage['pct']:.1f}%"
         r.ids.storage_card.subtitle = f"{storage['used']} / {storage['total']}"
         r.ids.storage_card.bar_pct  = storage['pct']
 
-        # -- Thermal --
+        # Thermal
         therm = get_thermal()
         r.ids.thermal_card.value    = f"{therm['cpu']}C"
         r.ids.thermal_card.subtitle = f"Max: {therm['max']}C"
