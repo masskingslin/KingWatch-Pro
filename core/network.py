@@ -1,13 +1,17 @@
 """
 KingWatch Pro v17 - core/network.py
-Upload/Download speeds, ping, signal strength, 2G/3G/4G/5G band detection.
+Upload/download speeds from /proc/net/dev.
+Band detection: tries TelephonyManager via jnius, falls back to sysfs.
+Ping from /proc/net/tcp RTT estimate.
 """
 import time
 import os
 
-_prev_rx   = 0
-_prev_tx   = 0
-_prev_time = 0.0
+_prev_rx    = 0
+_prev_tx    = 0
+_prev_time  = 0.0
+_band_cache = ""
+_band_time  = 0.0
 
 
 def _read_net_bytes():
@@ -18,7 +22,8 @@ def _read_net_bytes():
                 if ":" not in line:
                     continue
                 iface, data = line.split(":", 1)
-                if iface.strip() in ("lo",):
+                iface = iface.strip()
+                if iface == "lo":
                     continue
                 parts = data.split()
                 if len(parts) >= 9:
@@ -29,7 +34,7 @@ def _read_net_bytes():
     return rx, tx
 
 
-def _human(bps):
+def _human(bps: float) -> str:
     if bps >= 1_000_000:
         return f"{bps/1_000_000:.1f}MB/s"
     if bps >= 1_000:
@@ -38,47 +43,67 @@ def _human(bps):
 
 
 def _ping() -> str:
-    try:
-        with open("/proc/net/tcp") as f:
-            lines = f.readlines()[1:8]
-        rtts = []
-        for ln in lines:
-            p = ln.split()
-            if len(p) >= 13:
-                rto = int(p[12], 16) * 4   # jiffies at ~250Hz → ms
-                if 4 < rto < 2000:
-                    rtts.append(rto)
-        if rtts:
-            return f"{min(rtts)}ms"
-    except Exception:
-        pass
+    # Use /proc/net/tcp6 or tcp to estimate round-trip
+    for path in ("/proc/net/tcp6", "/proc/net/tcp"):
+        try:
+            with open(path) as f:
+                lines = f.readlines()[1:10]
+            rtts = []
+            for ln in lines:
+                p = ln.split()
+                if len(p) >= 13:
+                    # column 12 = retransmit timeout in jiffies (250Hz kernel → 4ms each)
+                    try:
+                        rto = int(p[12], 16) * 4
+                        if 4 < rto < 3000:
+                            rtts.append(rto)
+                    except Exception:
+                        pass
+            if rtts:
+                return f"{min(rtts)}ms"
+        except Exception:
+            continue
     return "N/A"
 
 
 def _band() -> str:
-    """Detect mobile network type via Android TelephonyManager."""
-    try:
-        from jnius import autoclass
-        PythonActivity   = autoclass("org.kivy.android.PythonActivity")
-        Context          = autoclass("android.content.Context")
-        ctx              = PythonActivity.mActivity
-        tm               = ctx.getSystemService(Context.TELEPHONY_SERVICE)
-        nt               = tm.getNetworkType()
+    """Network band - cached for 10s to avoid pyjnius overhead."""
+    global _band_cache, _band_time
+    now = time.monotonic()
+    if _band_cache and now - _band_time < 10:
+        return _band_cache
 
+    result = _detect_band()
+    _band_cache = result
+    _band_time  = now
+    return result
+
+
+def _detect_band() -> str:
+    # 1. Android TelephonyManager
+    try:
+        from jnius import autoclass  # type: ignore
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Context        = autoclass("android.content.Context")
+        ctx = PythonActivity.mActivity
+        tm  = ctx.getSystemService(Context.TELEPHONY_SERVICE)
+        nt  = tm.getNetworkType()
         _MAP = {
-            1:  "2G GPRS",   2:  "2G EDGE",   3:  "3G UMTS",
-            4:  "2G CDMA",   5:  "3G EVDO-0", 6:  "3G EVDO-A",
-            7:  "2G 1xRTT",  8:  "3G HSDPA",  9:  "3G HSUPA",
-            10: "3G HSPA",   11: "2G iDEN",   12: "3G EVDO-B",
-            13: "4G LTE",    14: "3G eHRPD",  15: "4G HSPA+",
-            16: "2G GSM",    17: "4G TDLTE",  18: "WiFi",
-            19: "4G LTE-CA", 20: "5G NR",
+            0:  "Unknown",  1:  "2G GPRS",  2:  "2G EDGE",
+            3:  "3G UMTS",  4:  "2G CDMA",  5:  "3G EVDO-0",
+            6:  "3G EVDO-A",7:  "2G 1xRTT", 8:  "3G HSDPA",
+            9:  "3G HSUPA", 10: "3G HSPA",  11: "2G iDEN",
+            12: "3G EVDO-B",13: "4G LTE",   14: "3G eHRPD",
+            15: "4G HSPA+", 16: "2G GSM",   17: "4G TD-LTE",
+            18: "WiFi Call",19: "4G LTE-CA",20: "5G NR",
         }
-        return _MAP.get(nt, f"Net#{nt}")
+        band = _MAP.get(nt, f"Net#{nt}")
+        if band != "Unknown":
+            return band
     except Exception:
         pass
 
-    # Fallback: check /proc/net/wireless for WiFi
+    # 2. WiFi signal from /proc/net/wireless
     try:
         with open("/proc/net/wireless") as f:
             lines = f.readlines()
@@ -93,12 +118,20 @@ def _band() -> str:
     except Exception:
         pass
 
-    # Check interface names
+    # 3. Check active interface names
     try:
-        for iface in os.listdir("/sys/class/net"):
-            if iface.startswith("wlan"):
+        for iface in sorted(os.listdir("/sys/class/net")):
+            op = f"/sys/class/net/{iface}/operstate"
+            try:
+                with open(op) as f:
+                    state = f.read().strip()
+            except Exception:
+                state = ""
+            if state != "up":
+                continue
+            if iface.startswith("wlan") or iface.startswith("wlp"):
                 return "WiFi"
-            if iface.startswith(("rmnet", "ccmni", "seth_lte")):
+            if iface.startswith(("rmnet", "ccmni", "seth", "usb")):
                 return "Mobile"
     except Exception:
         pass
@@ -111,10 +144,10 @@ def get_network() -> dict:
 
     now    = time.monotonic()
     rx, tx = _read_net_bytes()
-    elapsed = now - _prev_time if _prev_time > 0 else 1.0
 
-    dl = max(0, (rx - _prev_rx) / elapsed) if _prev_rx else 0
-    ul = max(0, (tx - _prev_tx) / elapsed) if _prev_tx else 0
+    elapsed = now - _prev_time if _prev_time > 0 else 1.0
+    dl = max(0.0, (rx - _prev_rx) / elapsed) if _prev_rx > 0 else 0.0
+    ul = max(0.0, (tx - _prev_tx) / elapsed) if _prev_tx > 0 else 0.0
 
     _prev_rx   = rx
     _prev_tx   = tx
