@@ -1,18 +1,12 @@
 """
 KingWatch Pro v17 - main.py
-FIXES:
-  - Double render eliminated: Builder.load_file called ONCE only
-  - Instant data on first frame (no -- dashes)
-  - GPU load shown in FPS card
-  - Battery: charge/discharge ETA, current with sign, temp, voltage, power
-  - Network: band (2G/3G/4G/5G), ping, upload/download
-  - Thermal: CPU / GPU / Battery / Max temp all shown
 """
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import ListProperty, BooleanProperty
+from kivy.properties import ListProperty, BooleanProperty, StringProperty
+import time as _time
 
 from core.fps import PerformanceMonitor
 from core.cpu import get_cpu
@@ -23,7 +17,6 @@ from core.storage import get_storage
 from core.thermal import get_thermal
 from themes import THEME_NAMES, get_theme
 
-# ── Load KV exactly once ──────────────────────────────────────────────────
 Builder.load_file("kingwatch.kv")
 
 
@@ -38,6 +31,7 @@ class RootWidget(BoxLayout):
     sub_col   = ListProperty([0.55, 0.55, 0.55, 1])
     bar_bg    = ListProperty([0.18, 0.18, 0.18, 1])
     collapsed = BooleanProperty(False)
+    clock_str = StringProperty("00:00:00")
     theme_idx = 0
 
     def apply_theme(self, name):
@@ -60,6 +54,9 @@ class RootWidget(BoxLayout):
     def toggle_collapse(self):
         self.collapsed = not self.collapsed
 
+    def tick_clock(self, dt):
+        self.clock_str = _time.strftime("%H:%M:%S")
+
 
 class KingWatchApp(App):
 
@@ -67,13 +64,14 @@ class KingWatchApp(App):
         self.monitor = PerformanceMonitor()
         self.root_widget = RootWidget()
         self.root_widget.apply_theme("Dark Pro")
-        # First frame: populate immediately (no "--" flash)
         Clock.schedule_once(self._populate, 0)
         Clock.schedule_interval(self._update_fps,   0.5)
         Clock.schedule_interval(self._update_stats, 1.0)
+        Clock.schedule_interval(self.root_widget.tick_clock, 1.0)
         return self.root_widget
 
     def _populate(self, dt):
+        self.root_widget.tick_clock(0)
         self._update_fps(0)
         self._update_stats(0)
 
@@ -83,7 +81,6 @@ class KingWatchApp(App):
         gpu = self.monitor.get_gpu()
         ref = self.monitor.get_refresh_rate()
         pct = min(100, fps / ref * 100) if ref > 0 else 0
-
         r.ids.fps_card.value    = f"{fps} FPS"
         r.ids.fps_card.subtitle = f"Refresh: {ref} Hz"
         r.ids.fps_card.detail1  = f"GPU Load: {gpu}"
@@ -92,42 +89,36 @@ class KingWatchApp(App):
     def _update_stats(self, dt):
         r = self.root_widget
 
-        # ── CPU ──────────────────────────────────────────────────────────
         cpu = get_cpu()
         r.ids.cpu_card.value    = f"{cpu['usage']:.1f}%"
         r.ids.cpu_card.subtitle = f"{cpu['freq']} MHz  |  {cpu['cores']} Cores"
         r.ids.cpu_card.detail1  = f"Processes: {cpu['procs']}"
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
-        # ── RAM ──────────────────────────────────────────────────────────
         ram_pct, ram_str = get_ram()
         r.ids.ram_card.value    = f"{ram_pct:.1f}%"
         r.ids.ram_card.subtitle = ram_str
         r.ids.ram_card.bar_pct  = ram_pct
 
-        # ── Battery ──────────────────────────────────────────────────────
         b = get_battery()
         r.ids.battery_card.value    = f"{b['pct']}%"
-        r.ids.battery_card.subtitle = b['eta']          # Charging/ETA
+        r.ids.battery_card.subtitle = b['eta']
         r.ids.battery_card.detail1  = f"{b['current']}  {b['volt']}  {b['power']}"
         r.ids.battery_card.detail2  = f"Temp: {b['temp']}  [{b['status']}]"
         r.ids.battery_card.bar_pct  = b['pct']
 
-        # ── Network ──────────────────────────────────────────────────────
         net = get_network()
         r.ids.network_card.value    = f"D:{net['dl']}"
         r.ids.network_card.subtitle = f"U:{net['ul']}"
         r.ids.network_card.detail1  = f"Ping: {net['ping']}   Band: {net['signal']}"
         r.ids.network_card.bar_pct  = 0
 
-        # ── Storage ──────────────────────────────────────────────────────
         s = get_storage()
         r.ids.storage_card.value    = f"{s['pct']:.1f}%"
         r.ids.storage_card.subtitle = f"{s['used']} / {s['total']}"
         r.ids.storage_card.detail1  = f"Free: {s['free']}"
         r.ids.storage_card.bar_pct  = s['pct']
 
-        # ── Thermal ──────────────────────────────────────────────────────
         th = get_thermal()
         r.ids.thermal_card.value    = f"{th['cpu']}C"
         r.ids.thermal_card.subtitle = f"GPU: {th['gpu']}C  Max: {th['max']}C"
