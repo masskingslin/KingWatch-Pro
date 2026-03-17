@@ -7,7 +7,6 @@ source.include_exts = py,png,jpg,kv,atlas,json,ttf
 source.exclude_dirs = tests,bin,.buildozer,.git,__pycache__,python-apk-source
 version = 1.6.0
 
-# No psutil - all stats from /proc and /sys
 requirements = python3,kivy==2.3.0,pyjnius,plyer
 
 orientation = portrait
@@ -36,6 +35,8 @@ android.archs = arm64-v8a, armeabi-v7a
 android.accept_sdk_license = True
 android.enable_androidx = True
 android.foreground_service_types = dataSync
+android.build_tools_version = 34.0.0
+android.java_version = 17
 
 android.service = KingWatchService:android_service.py:foreground
 
