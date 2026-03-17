@@ -1,5 +1,6 @@
 """
-KingWatch Pro — 8 colour themes (mirrors the original themes.py).
+KingWatch Pro - themes.py
+8 colour themes.
 """
 
 THEME_NAMES = [
