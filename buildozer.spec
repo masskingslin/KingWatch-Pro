@@ -5,9 +5,9 @@ package.domain = com.kingwatch
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf
 source.exclude_dirs = tests,bin,.buildozer,.git,__pycache__,python-apk-source
-version = 1.5.0
+version = 1.6.0
 
-# Core runtime â€” no pillow (ui/gauge.py is unused in runtime)
+# No psutil - all stats from /proc and /sys
 requirements = python3,kivy==2.3.0,pyjnius,plyer
 
 orientation = portrait
@@ -37,7 +37,6 @@ android.accept_sdk_license = True
 android.enable_androidx = True
 android.foreground_service_types = dataSync
 
-# Foreground service for background monitoring
 android.service = KingWatchService:android_service.py:foreground
 
 [buildozer]
