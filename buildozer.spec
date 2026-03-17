@@ -7,7 +7,8 @@ source.include_exts = py,png,jpg,kv,atlas,json,ttf
 source.exclude_dirs = tests,bin,.buildozer,.git,__pycache__,python-apk-source
 version = 1.5.0
 
-requirements = python3,kivy==2.3.0,pyjnius,plyer,pillow
+# Core runtime â€” no pillow (ui/gauge.py is unused in runtime)
+requirements = python3,kivy==2.3.0,pyjnius,plyer
 
 orientation = portrait
 fullscreen = 0
@@ -35,6 +36,9 @@ android.archs = arm64-v8a, armeabi-v7a
 android.accept_sdk_license = True
 android.enable_androidx = True
 android.foreground_service_types = dataSync
+
+# Foreground service for background monitoring
+android.service = KingWatchService:android_service.py:foreground
 
 [buildozer]
 log_level = 2
