@@ -1,6 +1,6 @@
 """
 KingWatch Pro v17 - main.py
-KingwatchApp → auto-loads kingwatch.kv once. No Builder.load_file.
+KingwatchApp → auto-loads kingwatch.kv. No Builder.load_file.
 """
 import time as _time
 from kivy.app import App
@@ -104,15 +104,18 @@ class KingwatchApp(App):
         b = get_battery()
         r.ids.battery_card.value    = f"{b['pct']}%"
         r.ids.battery_card.subtitle = b['eta']
-        r.ids.battery_card.detail1  = f"{b['current']}  {b['volt']}  Temp:{b['temp']}"
+        r.ids.battery_card.detail1  = (
+            f"{b['current']}  {b['volt']}  Temp:{b['temp']}"
+        )
         r.ids.battery_card.bar_pct  = b['pct']
 
-        # Network — arc shows download % of band max
+        # Network — arc = download % of band theoretical max
         net = get_network()
-        sig = net['signal']
-        r.ids.network_card.value    = f"D:{net['dl']}"
-        r.ids.network_card.subtitle = f"U: {net['ul']}  {sig}"
-        r.ids.network_card.detail1  = f"Ping: {net['ping']}"
+        # subtitle: "D: 2KB/s  U: 1KB/s"
+        # detail:   "4G LTE  Ping: 45ms"
+        r.ids.network_card.value    = net['dl']
+        r.ids.network_card.subtitle = f"Up: {net['ul']}"
+        r.ids.network_card.detail1  = f"{net['signal']}  {net['ping']}"
         r.ids.network_card.bar_pct  = net['arc_pct']
 
         # Storage
