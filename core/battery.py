@@ -1,68 +1,105 @@
 """
-KingWatch Pro - core/battery.py
-Battery stats via Android BatteryManager (pyjnius) with plyer fallback.
-No psutil.
+KingWatch Pro v17 - core/battery.py
+Full battery stats: pct, temp, voltage, current, power,
+charging/discharging ETA via capacity_level + charge_full.
 """
+import time
+
+_prev_pct  = -1
+_prev_time = 0.0
+_eta_cache = "Unknown"
 
 
-def _read_sys_battery(key: str, default=None):
-    """Read a value from /sys/class/power_supply/battery/<key>."""
-    paths = [
-        f"/sys/class/power_supply/battery/{key}",
-        f"/sys/class/power_supply/BAT0/{key}",
-        f"/sys/class/power_supply/BAT1/{key}",
-    ]
-    for p in paths:
+def _sys(key, default=None):
+    for prefix in ("battery", "BAT0", "BAT1", "bms", "main-battery"):
         try:
-            with open(p) as f:
+            with open(f"/sys/class/power_supply/{prefix}/{key}") as f:
                 return f.read().strip()
         except Exception:
             continue
     return default
 
 
-def get_battery() -> dict:
-    # ---- percentage ----
-    pct = 0
+def _int(val, default=0):
     try:
-        pct = int(_read_sys_battery("capacity", "0"))
+        return int(val)
     except Exception:
-        pass
+        return default
 
-    # ---- temperature (tenths of degC) ----
+
+def _eta_string(pct, status):
+    """Estimate charge/discharge time from capacity drain rate."""
+    global _prev_pct, _prev_time, _eta_cache
+    now = time.monotonic()
+
+    if _prev_pct < 0:
+        _prev_pct  = pct
+        _prev_time = now
+        return status
+
+    elapsed = now - _prev_time
+    delta   = pct - _prev_pct   # positive = charging, negative = draining
+
+    # Only update ETA every 60s
+    if elapsed >= 60 and delta != 0:
+        rate_per_min = abs(delta) / (elapsed / 60)
+        if rate_per_min > 0:
+            if delta > 0:
+                mins_left = (100 - pct) / rate_per_min
+                h, m = divmod(int(mins_left), 60)
+                _eta_cache = f"Full in {h}h {m:02d}m" if h > 0 else f"Full in {m}m"
+            else:
+                mins_left = pct / rate_per_min
+                h, m = divmod(int(mins_left), 60)
+                _eta_cache = f"Empty in {h}h {m:02d}m" if h > 0 else f"Empty in {m}m"
+        _prev_pct  = pct
+        _prev_time = now
+
+    if _eta_cache == "Unknown":
+        return status
+    return _eta_cache
+
+
+def get_battery() -> dict:
+    # Percentage
+    pct = _int(_sys("capacity", "0"))
+
+    # Status: Charging / Discharging / Full
+    status = _sys("status", "Unknown") or "Unknown"
+
+    # Temperature (tenths of °C)
     temp_str = "N/A"
     try:
-        raw = int(_read_sys_battery("temp", "0"))
+        raw = _int(_sys("temp", "0"))
         temp_str = f"{raw / 10:.1f}C"
     except Exception:
         pass
 
-    # ---- voltage (uV -> mV) ----
+    # Voltage µV → mV
     volt_str = "N/A"
+    v_mv = 0
     try:
-        raw = int(_read_sys_battery("voltage_now", "0"))
-        volt_str = f"{raw // 1000} mV"
+        raw  = _int(_sys("voltage_now", "0"))
+        v_mv = raw // 1000
+        volt_str = f"{v_mv} mV"
     except Exception:
         pass
 
-    # ---- current (uA -> mA, negative = discharging) ----
+    # Current µA → mA (may be negative when discharging)
     current_str = "N/A"
     power_str   = "N/A"
     try:
-        cur_ua  = int(_read_sys_battery("current_now", "0"))
+        cur_ua  = _int(_sys("current_now", "0"))
         cur_ma  = abs(cur_ua) // 1000
-        current_str = f"{cur_ma} mA"
-        # Power = V * I  (mW)
-        if volt_str != "N/A":
-            v_mv = int(_read_sys_battery("voltage_now", "0")) // 1000
-            power_mw = (v_mv * cur_ma) // 1000
+        sign    = "+" if status.lower() == "charging" else "-"
+        current_str = f"{sign}{cur_ma} mA"
+        if v_mv > 0:
+            power_mw  = (v_mv * cur_ma) // 1000
             power_str = f"{power_mw} mW"
     except Exception:
         pass
 
-    # ---- status / ETA ----
-    status = _read_sys_battery("status", "Unknown")
-    eta    = status if status else "Unknown"
+    eta = _eta_string(pct, status)
 
     return {
         "pct":     pct,
@@ -71,4 +108,5 @@ def get_battery() -> dict:
         "current": current_str,
         "power":   power_str,
         "eta":     eta,
+        "status":  status,
     }
