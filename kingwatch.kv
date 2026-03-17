@@ -18,7 +18,6 @@
             size: self.size
             radius: [dp(14)]
 
-    # Title row
     Label:
         size_hint_y: None
         height: dp(18)
@@ -30,7 +29,6 @@
         valign: "middle"
         text_size: self.size
 
-    # Gauge + details row
     BoxLayout:
         size_hint_y: None
         height: dp(100)
@@ -110,16 +108,31 @@
                 pos:  self.pos
                 size: self.size
 
+        # App title
         Label:
-            text: "KingWatch Pro v17"
-            font_size: dp(15)
+            text: "KingWatch Pro"
+            font_size: dp(14)
             bold: True
             color: root.text_col
             halign: "left"
             valign: "middle"
             text_size: self.size
+            size_hint_x: None
+            width: dp(130)
+
+        # Live clock - replaces Hide button
+        Label:
+            id: clock_label
+            text: root.clock_str
+            font_size: dp(18)
+            bold: True
+            color: root.accent
+            halign: "center"
+            valign: "middle"
+            text_size: self.size
             size_hint_x: 1
 
+        # Theme button
         Button:
             text: "Theme"
             size_hint: None, None
@@ -129,20 +142,22 @@
             color: 0, 0, 0, 1
             on_release: root.cycle_theme()
 
+        # Collapse toggle (small icon-style)
         Button:
-            text: "Hide"
+            text: "^" if root.collapsed else "v"
             size_hint: None, None
-            size: dp(52), dp(36)
-            font_size: dp(12)
+            size: dp(36), dp(36)
+            font_size: dp(16)
+            bold: True
             background_color: root.dim_col
             color: root.text_col
             on_release: root.toggle_collapse()
 
-    # Scrollable card list
+    # Scrollable cards
     ScrollView:
-        opacity:      0 if root.collapsed else 1
-        size_hint_y:  0 if root.collapsed else 1
-        do_scroll_x:  False
+        opacity:     0 if root.collapsed else 1
+        size_hint_y: 0 if root.collapsed else 1
+        do_scroll_x: False
 
         GridLayout:
             cols: 1
@@ -153,77 +168,77 @@
 
             StatCard:
                 id: fps_card
-                title:       "FPS / DISPLAY"
-                bg_color:    root.card_bg
-                title_color: root.dim_col
-                bar_color:   root.accent
-                bar_bg:      root.bar_bg
-                value_color: root.accent
-                sub_color:   root.sub_col
+                title:        "FPS / DISPLAY"
+                bg_color:     root.card_bg
+                title_color:  root.dim_col
+                bar_color:    root.accent
+                bar_bg:       root.bar_bg
+                value_color:  root.accent
+                sub_color:    root.sub_col
                 detail_color: root.dim_col
 
             StatCard:
                 id: cpu_card
-                title:       "CPU"
-                bg_color:    root.card_bg
-                title_color: root.dim_col
-                bar_color:   root.accent
-                bar_bg:      root.bar_bg
-                value_color: root.accent
-                sub_color:   root.sub_col
+                title:        "CPU"
+                bg_color:     root.card_bg
+                title_color:  root.dim_col
+                bar_color:    root.accent
+                bar_bg:       root.bar_bg
+                value_color:  root.accent
+                sub_color:    root.sub_col
                 detail_color: root.dim_col
 
             StatCard:
                 id: ram_card
-                title:       "RAM"
-                bg_color:    root.card_bg
-                title_color: root.dim_col
-                bar_color:   root.accent
-                bar_bg:      root.bar_bg
-                value_color: root.accent
-                sub_color:   root.sub_col
+                title:        "RAM"
+                bg_color:     root.card_bg
+                title_color:  root.dim_col
+                bar_color:    root.accent
+                bar_bg:       root.bar_bg
+                value_color:  root.accent
+                sub_color:    root.sub_col
                 detail_color: root.dim_col
 
             StatCard:
                 id: battery_card
-                title:       "BATTERY"
-                bg_color:    root.card_bg
-                title_color: root.dim_col
-                bar_color:   root.accent
-                bar_bg:      root.bar_bg
-                value_color: root.accent
-                sub_color:   root.sub_col
+                title:        "BATTERY"
+                bg_color:     root.card_bg
+                title_color:  root.dim_col
+                bar_color:    root.accent
+                bar_bg:       root.bar_bg
+                value_color:  root.accent
+                sub_color:    root.sub_col
                 detail_color: root.dim_col
 
             StatCard:
                 id: network_card
-                title:       "NETWORK"
-                bg_color:    root.card_bg
-                title_color: root.dim_col
-                bar_color:   root.accent
-                bar_bg:      root.bar_bg
-                value_color: root.accent
-                sub_color:   root.sub_col
+                title:        "NETWORK"
+                bg_color:     root.card_bg
+                title_color:  root.dim_col
+                bar_color:    root.accent
+                bar_bg:       root.bar_bg
+                value_color:  root.accent
+                sub_color:    root.sub_col
                 detail_color: root.dim_col
 
             StatCard:
                 id: storage_card
-                title:       "STORAGE"
-                bg_color:    root.card_bg
-                title_color: root.dim_col
-                bar_color:   root.warn
-                bar_bg:      root.bar_bg
-                value_color: root.warn
-                sub_color:   root.sub_col
+                title:        "STORAGE"
+                bg_color:     root.card_bg
+                title_color:  root.dim_col
+                bar_color:    root.warn
+                bar_bg:       root.bar_bg
+                value_color:  root.warn
+                sub_color:    root.sub_col
                 detail_color: root.dim_col
 
             StatCard:
                 id: thermal_card
-                title:       "THERMAL"
-                bg_color:    root.card_bg
-                title_color: root.dim_col
-                bar_color:   root.danger
-                bar_bg:      root.bar_bg
-                value_color: root.danger
-                sub_color:   root.sub_col
+                title:        "THERMAL"
+                bg_color:     root.card_bg
+                title_color:  root.dim_col
+                bar_color:    root.danger
+                bar_bg:       root.bar_bg
+                value_color:  root.danger
+                sub_color:    root.sub_col
                 detail_color: root.dim_col
