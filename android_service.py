@@ -1,14 +1,16 @@
 """
-KingWatch Pro â€” Background Foreground Service
-Keeps system monitoring active when screen is off.
-Runs as android.service in buildozer.spec.
+KingWatch Pro - android_service.py
+Background foreground service.
+Keeps monitoring alive when screen is off.
 """
 import time
-from android import AndroidService  # type: ignore
 
-service = AndroidService("KingWatch Pro", "Monitoring system stats...")
-service.start("service started")
+try:
+    from android import AndroidService  # type: ignore
+    service = AndroidService("KingWatch Pro", "Monitoring system stats...")
+    service.start("service started")
+except Exception:
+    pass
 
-# Keep the service alive
 while True:
     time.sleep(10)
