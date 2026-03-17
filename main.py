@@ -1,9 +1,6 @@
 """
 KingWatch Pro v17 - main.py
-- KingwatchApp → auto-loads kingwatch.kv once (no Builder.load_file)
-- CPU card shows usage arc + GPU load
-- Thermal cycles CPU→GPU→Battery each second
-- All arcs auto-color green/orange/red by pct
+KingwatchApp → auto-loads kingwatch.kv (no Builder.load_file)
 """
 import time as _time
 from kivy.app import App
@@ -60,9 +57,7 @@ class RootWidget(BoxLayout):
 
 
 class KingwatchApp(App):
-    # auto-loads kingwatch.kv — NO Builder.load_file anywhere
-
-    _thermal_mode = 0   # 0=CPU  1=GPU  2=Battery  (cycles each second)
+    _thermal_mode = 0
 
     def build(self):
         self.monitor     = PerformanceMonitor()
@@ -76,20 +71,19 @@ class KingwatchApp(App):
         Clock.schedule_interval(self.root_widget.tick_clock, 1.0)
         return self.root_widget
 
-    # ── FPS / GPU ─────────────────────────────────────────────────────────
     def _update_fps(self, dt):
         r   = self.root_widget
         fps = self.monitor.get_fps()
         gpu = self.monitor.get_gpu()
         ref = self.monitor.get_refresh_rate()
-        pct = min(100, fps / ref * 100) if ref > 0 else 0
+        pct = min(100, (fps / ref * 100)) if ref > 0 else 0
 
         r.ids.fps_card.value    = f"{fps} FPS"
-        r.ids.fps_card.subtitle = f"GPU: {gpu}"
-        r.ids.fps_card.detail1  = f"Refresh: {ref} Hz"
+        r.ids.fps_card.subtitle = f"Refresh: {ref} Hz"
+        # Only show GPU if available
+        r.ids.fps_card.detail1  = f"GPU: {gpu}" if gpu != "N/A" else ""
         r.ids.fps_card.bar_pct  = pct
 
-    # ── All stats ─────────────────────────────────────────────────────────
     def _update_stats(self, dt):
         r = self.root_widget
 
@@ -97,8 +91,8 @@ class KingwatchApp(App):
         cpu = get_cpu()
         mx  = cpu.get("max_freq", 0)
         r.ids.cpu_card.value    = f"{cpu['usage']:.1f}%"
-        r.ids.cpu_card.subtitle = f"{cpu['freq']}/{mx}MHz {cpu['cores']}C"
-        r.ids.cpu_card.detail1  = f"Procs: {cpu['procs']}"
+        r.ids.cpu_card.subtitle = f"{cpu['freq']}/{mx} MHz"
+        r.ids.cpu_card.detail1  = f"{cpu['cores']} Cores  Procs:{cpu['procs']}"
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
         # RAM
@@ -108,14 +102,14 @@ class KingwatchApp(App):
         r.ids.ram_card.detail1  = ""
         r.ids.ram_card.bar_pct  = ram_pct
 
-        # Battery (no auto-color — use green always for pct)
+        # Battery
         b = get_battery()
         r.ids.battery_card.value    = f"{b['pct']}%"
         r.ids.battery_card.subtitle = b['eta']
         r.ids.battery_card.detail1  = f"{b['current']}  {b['volt']}  Temp:{b['temp']}"
         r.ids.battery_card.bar_pct  = b['pct']
 
-        # Network
+        # Network — using TrafficStats API
         net = get_network()
         r.ids.network_card.value    = f"D:{net['dl']}"
         r.ids.network_card.subtitle = f"U: {net['ul']}"
@@ -129,32 +123,23 @@ class KingwatchApp(App):
         r.ids.storage_card.detail1  = f"Free: {s['free']}"
         r.ids.storage_card.bar_pct  = s['pct']
 
-        # Thermal — cycles CPU → GPU → Battery every second
+        # Thermal — cycles CPU → GPU → Battery each second
         th   = get_thermal()
         mode = self._thermal_mode % 3
         self._thermal_mode += 1
 
         if mode == 0:
-            temp  = th['cpu']
-            label = f"{temp}C"
-            sub   = "CPU Temp"
-            maxl  = 90
+            t, lbl, maxl = th['cpu'],  "CPU",  90.0
         elif mode == 1:
-            temp  = th['gpu']
-            label = f"{temp}C"
-            sub   = "GPU Temp"
-            maxl  = 85
+            t, lbl, maxl = th['gpu'],  "GPU",  85.0
         else:
-            temp  = th.get('batt', 0)
-            label = f"{temp}C"
-            sub   = "Batt Temp"
-            maxl  = 45
+            t, lbl, maxl = th['batt'], "Batt", 45.0
 
-        throttle = "  THROTTLE" if th['cpu'] >= 80 else ""
-        r.ids.thermal_card.value    = label
-        r.ids.thermal_card.subtitle = f"{sub}  Max:{th['max']}C{throttle}"
+        warn = "  ⚠THROTTLE" if th['cpu'] >= 80 else ""
+        r.ids.thermal_card.value    = f"{t}C"
+        r.ids.thermal_card.subtitle = f"{lbl}  Max:{th['max']}C{warn}"
         r.ids.thermal_card.detail1  = th['detail']
-        r.ids.thermal_card.bar_pct  = min(100, (temp / maxl) * 100) if maxl else 0
+        r.ids.thermal_card.bar_pct  = min(100, (t / maxl * 100)) if maxl else 0
 
 
 if __name__ == "__main__":
