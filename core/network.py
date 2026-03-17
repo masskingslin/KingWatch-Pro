@@ -1,44 +1,48 @@
 """
 KingWatch Pro v17 - core/network.py
-Reads ALL interfaces from /proc/net/dev including rmnet/wlan.
-Special handling for Android mobile data interfaces.
+Reads bytes from /sys/class/net/<iface>/statistics/ — more reliable than
+/proc/net/dev on modern Android kernels.
 """
-import time
 import os
+import time
 
-_prev_rx    = 0
-_prev_tx    = 0
-_prev_time  = 0.0
+_prev_rx   = 0
+_prev_tx   = 0
+_prev_time = 0.0
 _band_cache = "N/A"
-_band_tick  = 0
+_band_age   = 0
 
 
-def _read_net_bytes():
-    """Read total RX/TX bytes from all non-loopback interfaces."""
+def _iface_bytes():
+    """Sum RX/TX from all active non-loopback interfaces via sysfs."""
     rx = tx = 0
-    active_ifaces = []
+    active = []
+    base = "/sys/class/net"
     try:
-        with open("/proc/net/dev") as f:
-            lines = f.readlines()
-        for line in lines[2:]:   # skip 2 header lines
-            line = line.strip()
-            if not line or ":" not in line:
+        ifaces = os.listdir(base)
+    except Exception:
+        return 0, 0, []
+
+    for iface in ifaces:
+        if iface == "lo":
+            continue
+        try:
+            # Check if interface is up
+            with open(f"{base}/{iface}/operstate") as f:
+                state = f.read().strip()
+            if state not in ("up", "unknown"):
                 continue
-            iface, stats = line.split(":", 1)
-            iface = iface.strip()
-            if iface == "lo":
-                continue
-            cols = stats.split()
-            if len(cols) >= 9:
-                r = int(cols[0])
-                t = int(cols[8])
-                if r > 0 or t > 0:
-                    active_ifaces.append(iface)
+            with open(f"{base}/{iface}/statistics/rx_bytes") as f:
+                r = int(f.read().strip())
+            with open(f"{base}/{iface}/statistics/tx_bytes") as f:
+                t = int(f.read().strip())
+            if r > 0 or t > 0:
                 rx += r
                 tx += t
-    except Exception:
-        pass
-    return rx, tx, active_ifaces
+                active.append(iface)
+        except Exception:
+            continue
+    return rx, tx, active
 
 
 def _human(bps: float) -> str:
@@ -54,19 +58,18 @@ def _ping() -> str:
         try:
             with open(path) as f:
                 lines = f.readlines()[1:12]
-            rtts = []
+            vals = []
             for ln in lines:
                 p = ln.split()
-                # col 3 = state (01=ESTABLISHED), col 12 = timeout
                 if len(p) >= 13 and p[3] == "01":
                     try:
-                        rto = int(p[12], 16) * 4   # jiffies@250Hz → ms
-                        if 1 < rto < 3000:
-                            rtts.append(rto)
+                        v = int(p[12], 16) * 4
+                        if 2 < v < 2000:
+                            vals.append(v)
                     except Exception:
                         pass
-            if rtts:
-                return f"{min(rtts)}ms"
+            if vals:
+                return f"{min(vals)}ms"
         except Exception:
             continue
     return "N/A"
@@ -75,16 +78,15 @@ def _ping() -> str:
 def _wifi_dbm() -> str:
     try:
         with open("/proc/net/wireless") as f:
-            for i, line in enumerate(f):
+            for i, ln in enumerate(f):
                 if i < 2:
                     continue
-                parts = line.split()
-                if len(parts) >= 4:
-                    val = parts[3].rstrip(".")
-                    dbm = int(float(val))
-                    # /proc/net/wireless sometimes reports in positive form
+                p = ln.split()
+                if len(p) >= 4:
+                    v = p[3].rstrip(".")
+                    dbm = int(float(v))
                     if dbm > 0:
-                        dbm = dbm - 256
+                        dbm -= 256
                     return f"WiFi {dbm}dBm"
     except Exception:
         pass
@@ -98,44 +100,46 @@ def _mobile_band() -> str:
         tm  = ctx.getSystemService(
               autoclass("android.content.Context").TELEPHONY_SERVICE)
         nt  = tm.getNetworkType()
-        _M  = {
-            1:"2G GPRS", 2:"2G EDGE",  3:"3G UMTS",  4:"2G CDMA",
-            5:"3G EVDO", 6:"3G EVDO",  7:"2G 1xRTT", 8:"3G HSDPA",
-            9:"3G HSUPA",10:"3G HSPA", 11:"2G iDEN",  12:"3G EVDO-B",
-            13:"4G LTE", 14:"3G eHRPD",15:"4G HSPA+", 16:"2G GSM",
-            17:"4G TDD", 18:"WiFi",    19:"4G LTE-CA",20:"5G NR",
+        M = {
+            1:"2G GPRS",  2:"2G EDGE",   3:"3G UMTS",
+            4:"2G CDMA",  5:"3G EVDO-0", 6:"3G EVDO-A",
+            7:"2G 1xRTT", 8:"3G HSDPA",  9:"3G HSUPA",
+            10:"3G HSPA", 11:"2G iDEN",  12:"3G EVDO-B",
+            13:"4G LTE",  14:"3G eHRPD", 15:"4G HSPA+",
+            16:"2G GSM",  17:"4G TDD",   18:"WiFi Call",
+            19:"4G LTE-CA", 20:"5G NR",
         }
-        return _M.get(nt, f"Net#{nt}")
+        return M.get(nt, f"Net#{nt}")
     except Exception:
         pass
     return ""
 
 
-def _detect_band(ifaces) -> str:
-    # Check WiFi first
+def _detect_band(active_ifaces) -> str:
+    # WiFi signal first
     wifi = _wifi_dbm()
     if wifi:
         return wifi
-    # Check if any mobile interface is active
-    for iface in ifaces:
-        if any(iface.startswith(p) for p in
-               ("rmnet", "ccmni", "seth", "usb", "ppp", "wwan")):
-            band = _mobile_band()
-            return band if band else "Mobile"
-        if iface.startswith(("wlan", "wlp")):
+    # Mobile interface names
+    mobile_prefixes = ("rmnet", "ccmni", "seth", "usb", "wwan", "ppp", "qmi")
+    for iface in active_ifaces:
+        if any(iface.startswith(p) for p in mobile_prefixes):
+            b = _mobile_band()
+            return b if b else "Mobile"
+        if iface.startswith(("wlan", "wlp", "wifi")):
             return _wifi_dbm() or "WiFi"
-    # Last resort: TelephonyManager
-    band = _mobile_band()
-    return band if band else "N/A"
+    # Try TelephonyManager directly
+    b = _mobile_band()
+    return b if b else "N/A"
 
 
 def get_network() -> dict:
-    global _prev_rx, _prev_tx, _prev_time, _band_cache, _band_tick
+    global _prev_rx, _prev_tx, _prev_time, _band_cache, _band_age
 
     now = time.monotonic()
-    rx, tx, ifaces = _read_net_bytes()
+    rx, tx, active = _iface_bytes()
 
-    elapsed = now - _prev_time if _prev_time > 0 else 1.0
+    elapsed = max(0.1, now - _prev_time) if _prev_time > 0 else 1.0
     dl = max(0.0, (rx - _prev_rx) / elapsed) if _prev_rx > 0 else 0.0
     ul = max(0.0, (tx - _prev_tx) / elapsed) if _prev_tx > 0 else 0.0
 
@@ -143,11 +147,10 @@ def get_network() -> dict:
     _prev_tx   = tx
     _prev_time = now
 
-    # Refresh band every 5s
-    _band_tick += 1
-    if _band_tick >= 5 or _band_cache == "N/A":
-        _band_cache = _detect_band(ifaces)
-        _band_tick  = 0
+    _band_age += 1
+    if _band_age >= 5 or _band_cache == "N/A":
+        _band_cache = _detect_band(active)
+        _band_age   = 0
 
     return {
         "dl":     _human(dl),
