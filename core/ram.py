@@ -1,25 +1,41 @@
-def get_ram():
-    """
-    Returns (pct: float, display_str: str)
-    e.g.  (72.4, "2980MB / 4096MB")
-    """
+"""
+KingWatch Pro - core/ram.py
+RAM usage from /proc/meminfo. No psutil.
+"""
+
+
+def _parse_meminfo() -> dict:
+    info = {}
     try:
-        mem = {}
         with open("/proc/meminfo") as f:
             for line in f:
-                p = line.split()
-                if len(p) >= 2:
-                    mem[p[0].rstrip(":")] = int(p[1])
-
-        total = mem["MemTotal"]
-        avail = mem.get("MemAvailable", mem.get("MemFree", 0))
-        used  = total - avail
-
-        pct      = round(used / total * 100, 1) if total else 0
-        used_mb  = used  // 1024
-        total_mb = total // 1024
-
-        return pct, f"{used_mb}MB / {total_mb}MB"
-
+                parts = line.split()
+                if len(parts) >= 2:
+                    key = parts[0].rstrip(":")
+                    info[key] = int(parts[1])  # values in kB
     except Exception:
-        return 0.0, "N/A"
+        pass
+    return info
+
+
+def _kb_to_human(kb: int) -> str:
+    if kb >= 1024 * 1024:
+        return f"{kb / (1024 * 1024):.1f} GB"
+    return f"{kb / 1024:.0f} MB"
+
+
+def get_ram() -> tuple:
+    """Return (used_pct: float, label: str)."""
+    info = _parse_meminfo()
+    total    = info.get("MemTotal", 0)
+    free     = info.get("MemFree", 0)
+    buffers  = info.get("Buffers", 0)
+    cached   = info.get("Cached", 0)
+    s_reclm  = info.get("SReclaimable", 0)
+
+    used = total - free - buffers - cached - s_reclm
+    used = max(0, used)
+
+    pct = (used / total * 100) if total > 0 else 0.0
+    label = f"{_kb_to_human(used)} / {_kb_to_human(total)}"
+    return pct, label
