@@ -1,1 +1,0 @@
-# KingWatch Pro - core package
