@@ -1,5 +1,4 @@
 #:import ArcGauge ui.widgets.ArcGauge
-#:import StatCard ui.widgets.StatCard
 #:import dp kivy.metrics.dp
 
 # ── StatCard ───────────────────────────────────────────────────────────────
@@ -8,7 +7,7 @@
     size_hint_y: None
     height: self.minimum_height
     padding: [dp(12), dp(10), dp(12), dp(10)]
-    spacing: dp(4)
+    spacing: dp(6)
 
     canvas.before:
         Color:
@@ -18,69 +17,77 @@
             size: self.size
             radius: [dp(14)]
 
+    # Title
     Label:
         size_hint_y: None
-        height: dp(18)
+        height: dp(20)
         text: root.title.upper()
-        font_size: dp(10)
+        font_size: dp(11)
         bold: True
         color: root.title_color
         halign: "left"
         valign: "middle"
         text_size: self.size
 
+    # Gauge + right side
     BoxLayout:
         size_hint_y: None
-        height: dp(100)
-        spacing: dp(12)
+        height: dp(105)
+        spacing: dp(10)
 
+        # Circular arc gauge
         ArcGauge:
-            id: gauge
             size_hint_x: None
-            width: dp(100)
+            width: dp(105)
             size_hint_y: 1
             pct:         root.bar_pct
             arc_color:   root.bar_color
             arc_bg:      root.bar_bg
             label_text:  root.value
             label_color: root.value_color
-            thickness:   dp(9)
+            thickness:   dp(10)
 
+        # Right: subtitle + details
         BoxLayout:
             orientation: "vertical"
-            spacing: dp(3)
-            padding: [0, dp(8), 0, dp(8)]
+            spacing: dp(4)
+            padding: [0, dp(6), 0, dp(6)]
 
             Label:
                 text: root.subtitle
-                font_size: dp(12)
+                font_size: dp(13)
+                bold: True
                 color: root.sub_color
                 halign: "left"
-                valign: "middle"
+                valign: "top"
                 text_size: self.size
                 size_hint_y: 1
 
             Label:
                 size_hint_y: None
-                height: dp(15) if root.detail1 else 0
+                height: dp(18) if root.detail1 else 0
                 opacity: 1 if root.detail1 else 0
                 text: root.detail1
-                font_size: dp(10)
+                font_size: dp(11)
                 color: root.detail_color
                 halign: "left"
                 valign: "middle"
                 text_size: self.size
+                shorten: True
+                shorten_from: "right"
 
             Label:
                 size_hint_y: None
-                height: dp(15) if root.detail2 else 0
+                height: dp(18) if root.detail2 else 0
                 opacity: 1 if root.detail2 else 0
                 text: root.detail2
-                font_size: dp(10)
+                font_size: dp(11)
                 color: root.detail_color
                 halign: "left"
                 valign: "middle"
                 text_size: self.size
+                shorten: True
+                shorten_from: "right"
 
 
 # ── RootWidget ─────────────────────────────────────────────────────────────
@@ -97,8 +104,8 @@
     # Header bar
     BoxLayout:
         size_hint_y: None
-        height: dp(50)
-        padding: [dp(14), dp(7)]
+        height: dp(52)
+        padding: [dp(14), dp(8)]
         spacing: dp(8)
 
         canvas.before:
@@ -108,7 +115,6 @@
                 pos:  self.pos
                 size: self.size
 
-        # App title
         Label:
             text: "KingWatch Pro"
             font_size: dp(14)
@@ -118,13 +124,11 @@
             valign: "middle"
             text_size: self.size
             size_hint_x: None
-            width: dp(130)
+            width: dp(120)
 
-        # Live clock - replaces Hide button
         Label:
-            id: clock_label
             text: root.clock_str
-            font_size: dp(18)
+            font_size: dp(20)
             bold: True
             color: root.accent
             halign: "center"
@@ -132,7 +136,6 @@
             text_size: self.size
             size_hint_x: 1
 
-        # Theme button
         Button:
             text: "Theme"
             size_hint: None, None
@@ -142,7 +145,6 @@
             color: 0, 0, 0, 1
             on_release: root.cycle_theme()
 
-        # Collapse toggle (small icon-style)
         Button:
             text: "^" if root.collapsed else "v"
             size_hint: None, None
@@ -153,7 +155,7 @@
             color: root.text_col
             on_release: root.toggle_collapse()
 
-    # Scrollable cards
+    # Cards scroll area
     ScrollView:
         opacity:     0 if root.collapsed else 1
         size_hint_y: 0 if root.collapsed else 1
@@ -174,8 +176,8 @@
                 bar_color:    root.accent
                 bar_bg:       root.bar_bg
                 value_color:  root.accent
-                sub_color:    root.sub_col
-                detail_color: root.dim_col
+                sub_color:    root.text_col
+                detail_color: root.sub_col
 
             StatCard:
                 id: cpu_card
@@ -185,8 +187,8 @@
                 bar_color:    root.accent
                 bar_bg:       root.bar_bg
                 value_color:  root.accent
-                sub_color:    root.sub_col
-                detail_color: root.dim_col
+                sub_color:    root.text_col
+                detail_color: root.sub_col
 
             StatCard:
                 id: ram_card
@@ -196,8 +198,8 @@
                 bar_color:    root.accent
                 bar_bg:       root.bar_bg
                 value_color:  root.accent
-                sub_color:    root.sub_col
-                detail_color: root.dim_col
+                sub_color:    root.text_col
+                detail_color: root.sub_col
 
             StatCard:
                 id: battery_card
@@ -207,8 +209,8 @@
                 bar_color:    root.accent
                 bar_bg:       root.bar_bg
                 value_color:  root.accent
-                sub_color:    root.sub_col
-                detail_color: root.dim_col
+                sub_color:    root.text_col
+                detail_color: root.sub_col
 
             StatCard:
                 id: network_card
@@ -218,8 +220,8 @@
                 bar_color:    root.accent
                 bar_bg:       root.bar_bg
                 value_color:  root.accent
-                sub_color:    root.sub_col
-                detail_color: root.dim_col
+                sub_color:    root.text_col
+                detail_color: root.sub_col
 
             StatCard:
                 id: storage_card
@@ -229,8 +231,8 @@
                 bar_color:    root.warn
                 bar_bg:       root.bar_bg
                 value_color:  root.warn
-                sub_color:    root.sub_col
-                detail_color: root.dim_col
+                sub_color:    root.text_col
+                detail_color: root.sub_col
 
             StatCard:
                 id: thermal_card
@@ -240,5 +242,5 @@
                 bar_color:    root.danger
                 bar_bg:       root.bar_bg
                 value_color:  root.danger
-                sub_color:    root.sub_col
-                detail_color: root.dim_col
+                sub_color:    root.text_col
+                detail_color: root.sub_col
