@@ -134,15 +134,22 @@ class KingwatchApp(App):
         r.ids.battery_card.bar_pct  = b['pct']
 
         # ── Network — Google speed-test style ────────────────────────────
-        net  = get_network()
-        rssi = net.get('rssi', '')
-        sig  = net['signal']
-        # Line 1 (subtitle): Upload + signal bars
-        # Line 2 (detail):   Band name + Ping
-        rssi_part = f" {rssi}" if rssi else ""
+        # Network
+        net    = get_network()
+        sig    = net['signal']
+        rssi   = net.get('rssi','')
+        bwmax  = net.get('bw_max','')
+        # Arc value = download, subtitle = upload
+        # Detail = band + receiver max bandwidth
         r.ids.network_card.value    = net['dl']
-        r.ids.network_card.subtitle = f"Up: {net['ul']}{rssi_part}"
-        r.ids.network_card.detail1  = f"{sig}  Ping:{net['ping']}"
+        r.ids.network_card.subtitle = 'Up: ' + net['ul']
+        if rssi:
+            detail = sig + '  ' + rssi
+        else:
+            detail = sig
+        if bwmax:
+            detail = detail + '  ' + bwmax
+        r.ids.network_card.detail1  = detail
         r.ids.network_card.bar_pct  = net['arc_pct']
 
         # ── Storage ──────────────────────────────────────────────────────
