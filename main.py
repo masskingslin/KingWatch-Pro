@@ -1,6 +1,6 @@
 """
 KingWatch Pro v17 - main.py
-KingwatchApp → Kivy auto-loads kingwatch.kv. No Builder.load_file.
+KingwatchApp → auto-loads kingwatch.kv. No Builder.load_file.
 """
 import time as _time
 from kivy.app import App
@@ -57,7 +57,10 @@ class RootWidget(BoxLayout):
 
 
 class KingwatchApp(App):
-    _thermal_mode = 0
+
+    # Thermal state — cycles every 10 seconds
+    _thermal_tick = 0   # counts seconds
+    _thermal_mode = 0   # 0=CPU  1=GPU  2=Battery
 
     def build(self):
         self.monitor     = PerformanceMonitor()
@@ -85,7 +88,7 @@ class KingwatchApp(App):
     def _update_stats(self, dt):
         r = self.root_widget
 
-        # CPU
+        # ── CPU ──────────────────────────────────────────────────────────
         cpu = get_cpu()
         mx  = cpu.get("max_freq", 0)
         r.ids.cpu_card.value    = f"{cpu['usage']:.1f}%"
@@ -93,14 +96,14 @@ class KingwatchApp(App):
         r.ids.cpu_card.detail1  = f"{cpu['cores']} Cores  Procs:{cpu['procs']}"
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
-        # RAM
+        # ── RAM ──────────────────────────────────────────────────────────
         ram_pct, ram_str = get_ram()
         r.ids.ram_card.value    = f"{ram_pct:.1f}%"
         r.ids.ram_card.subtitle = ram_str
         r.ids.ram_card.detail1  = ""
         r.ids.ram_card.bar_pct  = ram_pct
 
-        # Battery
+        # ── Battery ──────────────────────────────────────────────────────
         b = get_battery()
         r.ids.battery_card.value    = f"{b['pct']}%"
         r.ids.battery_card.subtitle = b['eta']
@@ -109,39 +112,50 @@ class KingwatchApp(App):
         )
         r.ids.battery_card.bar_pct  = b['pct']
 
-        # Network
-        # Arc = download % of band theoretical max
-        # Value  = download speed
-        # Sub    = upload speed
-        # Detail = band (4G/5G/WiFi) + ping
+        # ── Network — Google speed-test style ────────────────────────────
         net = get_network()
         r.ids.network_card.value    = net['dl']
         r.ids.network_card.subtitle = f"Up: {net['ul']}"
         r.ids.network_card.detail1  = f"{net['signal']}  Ping:{net['ping']}"
         r.ids.network_card.bar_pct  = net['arc_pct']
 
-        # Storage
+        # ── Storage ──────────────────────────────────────────────────────
         s = get_storage()
         r.ids.storage_card.value    = f"{s['pct']:.1f}%"
         r.ids.storage_card.subtitle = f"{s['used']} / {s['total']}"
         r.ids.storage_card.detail1  = f"Free: {s['free']}"
         r.ids.storage_card.bar_pct  = s['pct']
 
-        # Thermal — cycles CPU → GPU → Battery each second
-        th   = get_thermal()
-        mode = self._thermal_mode % 3
-        self._thermal_mode += 1
+        # ── Thermal — cycles CPU→GPU→Battery every 10 seconds ────────────
+        th = get_thermal()
+        self._thermal_tick += 1
+        if self._thermal_tick >= 10:
+            self._thermal_tick = 0
+            self._thermal_mode = (self._thermal_mode + 1) % 3
+
+        mode = self._thermal_mode
         if mode == 0:
-            t, lbl, maxl = th['cpu'],  "CPU",  90.0
+            t    = th['cpu']
+            maxl = th['cpu_max']   # 90°C
+            lbl  = "CPU"
         elif mode == 1:
-            t, lbl, maxl = th['gpu'],  "GPU",  85.0
+            t    = th['gpu']
+            maxl = th['gpu_max']   # 85°C
+            lbl  = "GPU"
         else:
-            t, lbl, maxl = th['batt'], "Batt", 45.0
-        warn = "  THROTTLE!" if th['cpu'] >= 80 else ""
+            t    = th['batt']
+            maxl = th['batt_max']  # 45°C
+            lbl  = "Battery"
+
+        pct_of_max = min(100, (t / maxl * 100)) if maxl > 0 else 0
+        warn = "  ⚠ THROTTLE" if th['cpu'] >= 80 else ""
+
         r.ids.thermal_card.value    = f"{t}C"
-        r.ids.thermal_card.subtitle = f"{lbl}  Max:{th['max']}C{warn}"
+        r.ids.thermal_card.subtitle = (
+            f"{lbl}: {t}C / {maxl}C{warn}"
+        )
         r.ids.thermal_card.detail1  = th['detail']
-        r.ids.thermal_card.bar_pct  = min(100, t / maxl * 100) if maxl else 0
+        r.ids.thermal_card.bar_pct  = pct_of_max
 
 
 if __name__ == "__main__":
