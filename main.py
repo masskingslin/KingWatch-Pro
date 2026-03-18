@@ -97,10 +97,10 @@ class KingwatchApp(App):
         r.ids.cpu_card.bar_pct  = cpu['usage']
 
         # ── RAM ──────────────────────────────────────────────────────────
-        ram_pct, ram_str = get_ram()
+        ram_pct, ram_str, ram_free = get_ram()
         r.ids.ram_card.value    = f"{ram_pct:.1f}%"
         r.ids.ram_card.subtitle = ram_str
-        r.ids.ram_card.detail1  = ""
+        r.ids.ram_card.detail1  = ram_free
         r.ids.ram_card.bar_pct  = ram_pct
 
         # ── Battery ──────────────────────────────────────────────────────
@@ -113,17 +113,15 @@ class KingwatchApp(App):
         r.ids.battery_card.bar_pct  = b['pct']
 
         # ── Network — Google speed-test style ────────────────────────────
-        net = get_network()
-        # Network card — Google speed-test style
-        # Arc value  = download speed
-        # Subtitle   = upload speed
-        # Detail     = Band (4G/5G/WiFi) + dBm bars + ping
+        net  = get_network()
         rssi = net.get('rssi', '')
         sig  = net['signal']
-        rssi_part = f"  {rssi}" if rssi else ""
+        # Line 1 (subtitle): Upload + signal bars
+        # Line 2 (detail):   Band name + Ping
+        rssi_part = f" {rssi}" if rssi else ""
         r.ids.network_card.value    = net['dl']
-        r.ids.network_card.subtitle = f"Up: {net['ul']}"
-        r.ids.network_card.detail1  = f"{sig}{rssi_part}  Ping:{net['ping']}"
+        r.ids.network_card.subtitle = f"Up: {net['ul']}{rssi_part}"
+        r.ids.network_card.detail1  = f"{sig}  Ping:{net['ping']}"
         r.ids.network_card.bar_pct  = net['arc_pct']
 
         # ── Storage ──────────────────────────────────────────────────────
