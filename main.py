@@ -77,19 +77,33 @@ class KingwatchApp(App):
     def _update_fps(self, dt):
         r       = self.root_widget
         fps     = self.monitor.get_fps()
+        max_fps = self.monitor.get_max_fps()
         gpu     = self.monitor.get_gpu()
         curr_hz = self.monitor.get_refresh_rate()
         max_hz  = self.monitor.get_max_refresh_rate()
-        pct     = min(100, fps / max_hz * 100) if max_hz > 0 else 0
+
+        # Arc = current FPS as % of max supported refresh rate
+        if 0 < max_hz:
+            pct = min(100, fps * 100 // max_hz)
+        else:
+            pct = 0
+
+        # Value: current FPS in arc centre
         r.ids.fps_card.value = str(fps) + " FPS"
+
+        # Subtitle line 1: Max FPS achieved this session
+        r.ids.fps_card.subtitle = "Max: " + str(max_fps) + " FPS"
+
+        # Detail line: current Hz / max Hz of device
         if curr_hz == max_hz:
-            r.ids.fps_card.subtitle = "Refresh: " + str(curr_hz) + " Hz"
+            hz_str = "Refresh: " + str(curr_hz) + " Hz"
         else:
-            r.ids.fps_card.subtitle = "Now:" + str(curr_hz) + "Hz  Max:" + str(max_hz) + "Hz"
-        if gpu != "N/A":
-            r.ids.fps_card.detail1 = "GPU: " + gpu
+            hz_str = str(curr_hz) + " Hz (max " + str(max_hz) + " Hz)"
+        if gpu == "N/A":
+            r.ids.fps_card.detail1 = hz_str
         else:
-            r.ids.fps_card.detail1 = ""
+            r.ids.fps_card.detail1 = hz_str + "  GPU:" + gpu
+
         r.ids.fps_card.bar_pct = pct
 
     def _update_stats(self, dt):
