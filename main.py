@@ -44,6 +44,9 @@ class RootWidget(BoxLayout):
         self.danger   = h(t["DANGER"])
         self.text_col = h(t["TEXT"])
         self.dim_col  = h(t["DIM"])
+        # sub_col = midpoint between DIM and TEXT
+        dim = h(t["DIM"]); txt = h(t["TEXT"])
+        self.sub_col  = [(dim[i]+txt[i])/2 for i in range(4)]
 
     def cycle_theme(self):
         self.theme_idx = (self.theme_idx + 1) % len(THEME_NAMES)
