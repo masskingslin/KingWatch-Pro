@@ -75,15 +75,22 @@ class KingwatchApp(App):
         return self.root_widget
 
     def _update_fps(self, dt):
-        r   = self.root_widget
-        fps = self.monitor.get_fps()
-        gpu = self.monitor.get_gpu()
-        ref = self.monitor.get_refresh_rate()
-        pct = min(100, fps / ref * 100) if ref > 0 else 0
-        r.ids.fps_card.value    = f"{fps} FPS"
-        r.ids.fps_card.subtitle = f"Refresh: {ref} Hz"
-        r.ids.fps_card.detail1  = f"GPU: {gpu}" if gpu != "N/A" else ""
-        r.ids.fps_card.bar_pct  = pct
+        r       = self.root_widget
+        fps     = self.monitor.get_fps()
+        gpu     = self.monitor.get_gpu()
+        curr_hz = self.monitor.get_refresh_rate()
+        max_hz  = self.monitor.get_max_refresh_rate()
+        pct     = min(100, fps / max_hz * 100) if max_hz > 0 else 0
+        r.ids.fps_card.value = str(fps) + " FPS"
+        if curr_hz == max_hz:
+            r.ids.fps_card.subtitle = "Refresh: " + str(curr_hz) + " Hz"
+        else:
+            r.ids.fps_card.subtitle = "Now:" + str(curr_hz) + "Hz  Max:" + str(max_hz) + "Hz"
+        if gpu != "N/A":
+            r.ids.fps_card.detail1 = "GPU: " + gpu
+        else:
+            r.ids.fps_card.detail1 = ""
+        r.ids.fps_card.bar_pct = pct
 
     def _update_stats(self, dt):
         r = self.root_widget
