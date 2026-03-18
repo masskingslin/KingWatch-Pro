@@ -114,9 +114,16 @@ class KingwatchApp(App):
 
         # ── Network — Google speed-test style ────────────────────────────
         net = get_network()
+        # Network card — Google speed-test style
+        # Arc value  = download speed
+        # Subtitle   = upload speed
+        # Detail     = Band (4G/5G/WiFi) + dBm bars + ping
+        rssi = net.get('rssi', '')
+        sig  = net['signal']
+        rssi_part = f"  {rssi}" if rssi else ""
         r.ids.network_card.value    = net['dl']
         r.ids.network_card.subtitle = f"Up: {net['ul']}"
-        r.ids.network_card.detail1  = f"{net['signal']}  Ping:{net['ping']}"
+        r.ids.network_card.detail1  = f"{sig}{rssi_part}  Ping:{net['ping']}"
         r.ids.network_card.bar_pct  = net['arc_pct']
 
         # ── Storage ──────────────────────────────────────────────────────
