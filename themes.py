@@ -1,6 +1,7 @@
 """
 KingWatch Pro v17 - themes.py
-8 modern themes with distinct colour identities.
+8 modern themes. All text colours are bright/white for readability.
+No unicode, no emoji.
 """
 
 THEME_NAMES = [
@@ -15,88 +16,88 @@ THEME_NAMES = [
 ]
 
 _THEMES = {
-    # ── 1. Dark Pro — default dark with vivid green ──────────────────────
+    # 1. Dark Pro - classic dark, bright green accent
     "Dark Pro": {
         "BG":     "#0A0A0A",
-        "CARD":   "#141414",
+        "CARD":   "#1A1A1A",
         "TEXT":   "#FFFFFF",
-        "DIM":    "#444444",
+        "DIM":    "#888888",
         "ACCENT": "#00E676",
         "WARN":   "#FF9100",
         "DANGER": "#FF1744",
     },
-    # ── 2. Amoled — true black OLED, electric cyan ───────────────────────
+    # 2. Amoled - true black, white text, cyan accent
     "Amoled": {
         "BG":     "#000000",
-        "CARD":   "#0A0A0A",
+        "CARD":   "#111111",
         "TEXT":   "#FFFFFF",
-        "DIM":    "#333333",
-        "ACCENT": "#00E5FF",
-        "WARN":   "#FFAB00",
+        "DIM":    "#777777",
+        "ACCENT": "#18FFFF",
+        "WARN":   "#FFD740",
         "DANGER": "#FF1744",
     },
-    # ── 3. Cyber Neon — dark purple base, hot magenta + yellow ───────────
+    # 3. Cyber Neon - dark purple, white text, magenta accent
     "Cyber Neon": {
-        "BG":     "#0D001A",
-        "CARD":   "#1A0030",
-        "TEXT":   "#F0E6FF",
-        "DIM":    "#6600AA",
-        "ACCENT": "#FF00FF",
-        "WARN":   "#FFE600",
-        "DANGER": "#FF1744",
+        "BG":     "#110022",
+        "CARD":   "#1E0038",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#9966CC",
+        "ACCENT": "#FF40FF",
+        "WARN":   "#FFFF00",
+        "DANGER": "#FF3040",
     },
-    # ── 4. Ocean Deep — deep navy, aqua accent ───────────────────────────
+    # 4. Ocean Deep - dark navy, white text, aqua accent
     "Ocean Deep": {
-        "BG":     "#020C18",
-        "CARD":   "#071828",
-        "TEXT":   "#E0F4FF",
-        "DIM":    "#1E4D6B",
-        "ACCENT": "#00BCD4",
+        "BG":     "#03111F",
+        "CARD":   "#071E30",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#5599BB",
+        "ACCENT": "#00E5FF",
         "WARN":   "#FF9800",
-        "DANGER": "#F44336",
+        "DANGER": "#FF3D00",
     },
-    # ── 5. Sunset Lava — near-black warm, vivid orange-red ───────────────
+    # 5. Sunset Lava - dark warm, white text, orange accent
     "Sunset Lava": {
-        "BG":     "#120500",
-        "CARD":   "#1E0A00",
-        "TEXT":   "#FFE5CC",
-        "DIM":    "#7A3000",
+        "BG":     "#150800",
+        "CARD":   "#221200",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#AA6622",
         "ACCENT": "#FF6D00",
-        "WARN":   "#FFCA28",
+        "WARN":   "#FFD600",
         "DANGER": "#DD2C00",
     },
-    # ── 6. Forest Night — deep green-black, lime accent ──────────────────
+    # 6. Forest Night - dark green, white text, lime accent
     "Forest Night": {
-        "BG":     "#030F03",
-        "CARD":   "#091509",
-        "TEXT":   "#D4EDDA",
-        "DIM":    "#2E5E2E",
-        "ACCENT": "#76FF03",
+        "BG":     "#041204",
+        "CARD":   "#0A1E0A",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#449944",
+        "ACCENT": "#69FF47",
         "WARN":   "#FFD600",
         "DANGER": "#FF3D00",
     },
-    # ── 7. Arctic Ice — cool dark slate, sky blue accent ─────────────────
+    # 7. Arctic Ice - dark slate, white text, sky blue accent
     "Arctic Ice": {
-        "BG":     "#040D14",
-        "CARD":   "#0A1A26",
-        "TEXT":   "#E8F4FD",
-        "DIM":    "#1E4060",
+        "BG":     "#06101A",
+        "CARD":   "#0D1E2E",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#5588AA",
         "ACCENT": "#40C4FF",
         "WARN":   "#FFD740",
         "DANGER": "#FF5252",
     },
-    # ── 8. Royal Purple — deep indigo, violet + gold ─────────────────────
+    # 8. Royal Purple - dark indigo, white text, violet accent
     "Royal Purple": {
-        "BG":     "#080010",
-        "CARD":   "#120020",
-        "TEXT":   "#EDE7F6",
-        "DIM":    "#4A1080",
-        "ACCENT": "#CE93D8",
+        "BG":     "#0C0018",
+        "CARD":   "#180030",
+        "TEXT":   "#FFFFFF",
+        "DIM":    "#9966BB",
+        "ACCENT": "#EA80FC",
         "WARN":   "#FFD54F",
         "DANGER": "#FF5252",
     },
 }
 
 
-def get_theme(name: str) -> dict:
+def get_theme(name):
     return _THEMES.get(name, _THEMES["Dark Pro"])
