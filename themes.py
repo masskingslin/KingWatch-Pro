@@ -1,99 +1,99 @@
 """
-KingWatch Pro - themes.py
-8 colour themes.
+KingWatch Pro v17 - themes.py
+8 modern themes with distinct colour identities.
 """
 
 THEME_NAMES = [
     "Dark Pro",
     "Amoled",
-    "Midnight",
-    "Cyberpunk",
-    "Solarized",
-    "Forest",
-    "Sunset",
-    "Ice Blue",
+    "Cyber Neon",
+    "Ocean Deep",
+    "Sunset Lava",
+    "Forest Night",
+    "Arctic Ice",
+    "Royal Purple",
 ]
 
 _THEMES = {
+    # ── 1. Dark Pro — default dark with vivid green ──────────────────────
     "Dark Pro": {
         "BG":     "#0A0A0A",
-        "CARD":   "#161616",
-        "CARD2":  "#1E1E1E",
+        "CARD":   "#141414",
         "TEXT":   "#FFFFFF",
-        "DIM":    "#555555",
+        "DIM":    "#444444",
         "ACCENT": "#00E676",
         "WARN":   "#FF9100",
         "DANGER": "#FF1744",
     },
+    # ── 2. Amoled — true black OLED, electric cyan ───────────────────────
     "Amoled": {
         "BG":     "#000000",
-        "CARD":   "#0D0D0D",
-        "CARD2":  "#1A1A1A",
+        "CARD":   "#0A0A0A",
         "TEXT":   "#FFFFFF",
-        "DIM":    "#444444",
+        "DIM":    "#333333",
         "ACCENT": "#00E5FF",
         "WARN":   "#FFAB00",
         "DANGER": "#FF1744",
     },
-    "Midnight": {
-        "BG":     "#0D0D2B",
-        "CARD":   "#13133D",
-        "CARD2":  "#1A1A4F",
-        "TEXT":   "#E8E8FF",
-        "DIM":    "#5050AA",
-        "ACCENT": "#7C83FD",
-        "WARN":   "#FFAB40",
-        "DANGER": "#FF5252",
-    },
-    "Cyberpunk": {
+    # ── 3. Cyber Neon — dark purple base, hot magenta + yellow ───────────
+    "Cyber Neon": {
         "BG":     "#0D001A",
         "CARD":   "#1A0030",
-        "CARD2":  "#260040",
         "TEXT":   "#F0E6FF",
-        "DIM":    "#7700AA",
+        "DIM":    "#6600AA",
         "ACCENT": "#FF00FF",
-        "WARN":   "#FFFF00",
+        "WARN":   "#FFE600",
         "DANGER": "#FF1744",
     },
-    "Solarized": {
-        "BG":     "#002B36",
-        "CARD":   "#073642",
-        "CARD2":  "#073642",
-        "TEXT":   "#FDF6E3",
-        "DIM":    "#586E75",
-        "ACCENT": "#2AA198",
-        "WARN":   "#CB4B16",
-        "DANGER": "#DC322F",
-    },
-    "Forest": {
-        "BG":     "#0A1A0A",
-        "CARD":   "#112211",
-        "CARD2":  "#1A2E1A",
-        "TEXT":   "#D4EDDA",
-        "DIM":    "#3A5C3A",
-        "ACCENT": "#4CAF50",
-        "WARN":   "#FFC107",
+    # ── 4. Ocean Deep — deep navy, aqua accent ───────────────────────────
+    "Ocean Deep": {
+        "BG":     "#020C18",
+        "CARD":   "#071828",
+        "TEXT":   "#E0F4FF",
+        "DIM":    "#1E4D6B",
+        "ACCENT": "#00BCD4",
+        "WARN":   "#FF9800",
         "DANGER": "#F44336",
     },
-    "Sunset": {
-        "BG":     "#1A0A00",
-        "CARD":   "#2E1500",
-        "CARD2":  "#3D1F00",
+    # ── 5. Sunset Lava — near-black warm, vivid orange-red ───────────────
+    "Sunset Lava": {
+        "BG":     "#120500",
+        "CARD":   "#1E0A00",
         "TEXT":   "#FFE5CC",
-        "DIM":    "#8B4513",
+        "DIM":    "#7A3000",
         "ACCENT": "#FF6D00",
         "WARN":   "#FFCA28",
-        "DANGER": "#F44336",
+        "DANGER": "#DD2C00",
     },
-    "Ice Blue": {
-        "BG":     "#001A2E",
-        "CARD":   "#002244",
-        "CARD2":  "#003366",
-        "TEXT":   "#E0F4FF",
-        "DIM":    "#336699",
-        "ACCENT": "#00BFFF",
-        "WARN":   "#FFD700",
-        "DANGER": "#FF4500",
+    # ── 6. Forest Night — deep green-black, lime accent ──────────────────
+    "Forest Night": {
+        "BG":     "#030F03",
+        "CARD":   "#091509",
+        "TEXT":   "#D4EDDA",
+        "DIM":    "#2E5E2E",
+        "ACCENT": "#76FF03",
+        "WARN":   "#FFD600",
+        "DANGER": "#FF3D00",
+    },
+    # ── 7. Arctic Ice — cool dark slate, sky blue accent ─────────────────
+    "Arctic Ice": {
+        "BG":     "#040D14",
+        "CARD":   "#0A1A26",
+        "TEXT":   "#E8F4FD",
+        "DIM":    "#1E4060",
+        "ACCENT": "#40C4FF",
+        "WARN":   "#FFD740",
+        "DANGER": "#FF5252",
+    },
+    # ── 8. Royal Purple — deep indigo, violet + gold ─────────────────────
+    "Royal Purple": {
+        "BG":     "#080010",
+        "CARD":   "#120020",
+        "TEXT":   "#EDE7F6",
+        "DIM":    "#4A1080",
+        "ACCENT": "#CE93D8",
+        "WARN":   "#FFD54F",
+        "DANGER": "#FF5252",
     },
 }
 
