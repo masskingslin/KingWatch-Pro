@@ -1,13 +1,6 @@
 """
 KingWatch Pro v17 - core/network.py
-
-PING FIX: socket.connect() fails silently on Android due to bytecode
-attribute cache collision in Python 3.11 packing.
-Use subprocess ping binary (/system/bin/ping) — always works on Android.
-Fallback: Java InetAddress.isReachable() via pyjnius.
-
-BAND: getLinkDownstreamBandwidthKbps() via NetworkCapabilities — no permission needed.
-SPEED: TrafficStats — no permission needed.
+Google-speed-test style: stable speeds, no blink, 5G/4G band, real ping.
 """
 import time, threading, os, glob, subprocess, re
 
@@ -17,56 +10,47 @@ _signal_str = "Detecting..."
 _band_mbps  = 10.0
 _bg_started = False
 _bw         = {}
+_lock       = threading.Lock()
 
 
-# ── Ping via subprocess (Android /system/bin/ping) ─────────────────────────
-def _ping_subprocess():
-    """Run system ping binary — ICMP, most reliable on Android."""
+# ── Ping worker ─────────────────────────────────────────────────────────────
+def _do_ping():
+    # Method 1: Android system ping binary
     for host in ("8.8.8.8", "1.1.1.1"):
         try:
             out = subprocess.check_output(
-                ["/system/bin/ping", "-c", "1", "-W", "2", host],
-                stderr=subprocess.DEVNULL,
-                timeout=4
+                ["/system/bin/ping", "-c", "3", "-W", "2", host],
+                stderr=subprocess.DEVNULL, timeout=8
             ).decode(errors="ignore")
-            # Parse "rtt min/avg/max/mdev = 12.3/12.3/12.3/0.0 ms"
-            m = re.search(r"min/avg/max[^=]*=\s*([\d.]+)", out)
+            m = re.search(r"min/avg/max[^=]+=\s*([\d.]+)/([\d.]+)", out)
             if m:
                 return round(float(m.group(1)), 1)
-            # Some Android versions: "time=12.3 ms"
             m = re.search(r"time=([\d.]+)\s*ms", out)
             if m:
                 return round(float(m.group(1)), 1)
         except Exception:
             continue
-    return None
 
-
-def _ping_jnius():
-    """InetAddress.isReachable() — Java ICMP/TCP fallback."""
+    # Method 2: Java InetAddress.isReachable
     try:
         from jnius import autoclass  # type: ignore
-        InetAddress = autoclass("java.net.InetAddress")
-        addr = InetAddress.getByName("8.8.8.8")
+        addr = autoclass("java.net.InetAddress").getByName("8.8.8.8")
         t0   = time.time()
-        ok   = addr.isReachable(2000)
+        ok   = addr.isReachable(3000)
         ms   = round((time.time() - t0) * 1000, 1)
-        if ok and ms > 0:
+        if ok:
             return ms
     except Exception:
         pass
-    return None
 
-
-def _ping_tcp():
-    """TCP SYN timing — last resort."""
-    import socket as _socket
-    for host, port in [("8.8.8.8", 53), ("1.1.1.1", 443)]:
+    # Method 3: TCP connect via alias to avoid Python 3.11 cache bug
+    import socket as _sock
+    for ip, port in [("8.8.8.8", 53), ("1.1.1.1", 443)]:
         try:
-            s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            s   = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
             s.settimeout(2.0)
             t0  = time.time()
-            err = s.connect_ex((host, port))
+            s.connect_ex((ip, port))
             ms  = round((time.time() - t0) * 1000, 1)
             s.close()
             if ms > 0:
@@ -78,39 +62,47 @@ def _ping_tcp():
 
 def _ping_worker():
     global _ping_ms
+    time.sleep(1)   # let app start first
     while True:
-        ms = _ping_subprocess()
-        if ms is None:
-            ms = _ping_jnius()
-        if ms is None:
-            ms = _ping_tcp()
-        _ping_ms = ms
+        ms = _do_ping()
+        with _lock:
+            _ping_ms = ms
         time.sleep(5)
 
 
-# ── Band/signal detection ───────────────────────────────────────────────────
+# ── Signal/band worker ──────────────────────────────────────────────────────
 def _detect_signal():
     global _band_mbps
 
-    # ConnectivityManager + NetworkCapabilities (API 21+, NO permission)
     try:
         from jnius import autoclass  # type: ignore
         Context        = autoclass("android.content.Context")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        ctx = PythonActivity.mActivity
 
-        ctx  = PythonActivity.mActivity
-        cm   = ctx.getSystemService(Context.CONNECTIVITY_SERVICE)
-        net  = cm.getActiveNetwork()
+        cm  = ctx.getSystemService(Context.CONNECTIVITY_SERVICE)
+        net = cm.getActiveNetwork()
+
         if net is None:
-            return "No Network"
+            # Phone may still have signal even if getActiveNetwork() is slow
+            # Try ConnectivityManager.getAllNetworks()
+            try:
+                nets = cm.getAllNetworks()
+                if nets and len(nets) > 0:
+                    net = nets[0]
+            except Exception:
+                pass
+
+        if net is None:
+            return "Searching..."
 
         caps = cm.getNetworkCapabilities(net)
         if caps is None:
-            return "Unknown"
+            return "Connected"
 
-        # Integer literals — avoids pyjnius static field access issues
-        TRANSPORT_CELLULAR = 0
+        # Use integer literals — avoids pyjnius static field bugs
         TRANSPORT_WIFI     = 1
+        TRANSPORT_CELLULAR = 0
         TRANSPORT_ETHERNET = 3
 
         if caps.hasTransport(TRANSPORT_WIFI):
@@ -118,8 +110,8 @@ def _detect_signal():
                 wm    = ctx.getSystemService(Context.WIFI_SERVICE)
                 info  = wm.getConnectionInfo()
                 rssi  = info.getRssi()
-                speed = info.getLinkSpeed()   # Mbps
-                freq  = info.getFrequency()   # MHz
+                freq  = info.getFrequency()
+                speed = info.getLinkSpeed()
                 band  = "5GHz" if freq >= 5000 else "2.4GHz"
                 q     = ("Excellent" if rssi >= -50 else
                          "Good"      if rssi >= -65 else
@@ -131,25 +123,38 @@ def _detect_signal():
                 return "WiFi"
 
         elif caps.hasTransport(TRANSPORT_CELLULAR):
+            # getLinkDownstreamBandwidthKbps — no permission needed, API 21+
+            dl = 0
+            ul = 0
             try:
                 dl = caps.getLinkDownstreamBandwidthKbps()
                 ul = caps.getLinkUpstreamBandwidthKbps()
-                if dl >= 50000:
-                    gen = "5G NR";  _band_mbps = 500.0
-                elif dl >= 5000:
-                    gen = "4G LTE"; _band_mbps = 50.0
-                elif dl >= 1000:
-                    gen = "4G";     _band_mbps = 20.0
-                elif dl >= 200:
-                    gen = "3G";     _band_mbps = 14.0
-                elif dl > 0:
-                    gen = "2G";     _band_mbps = 0.2
-                else:
-                    gen = "Mobile"; _band_mbps = 10.0
-                return f"{gen} {dl//1000}↓/{ul//1000}↑ Mbps"
             except Exception:
-                _band_mbps = 10.0
-                return "Mobile"
+                pass
+
+            if dl >= 100000:
+                gen = "5G NR";     _band_mbps = 1000.0
+            elif dl >= 20000:
+                gen = "5G";        _band_mbps = 500.0
+            elif dl >= 5000:
+                gen = "4G LTE";    _band_mbps = 50.0
+            elif dl >= 1000:
+                gen = "4G";        _band_mbps = 20.0
+            elif dl >= 200:
+                gen = "3G";        _band_mbps = 14.0
+            elif dl > 0:
+                gen = "2G";        _band_mbps = 0.5
+            else:
+                # dl=0 means API<29 or unknown — use getNetworkType string
+                gen = _cellular_gen_fallback(ctx, Context)
+                if not gen:
+                    gen = "Mobile"; _band_mbps = 10.0
+
+            dl_m = dl // 1000
+            ul_m = ul // 1000
+            if dl_m > 0:
+                return f"{gen} {dl_m}↓/{ul_m}↑Mbps"
+            return gen
 
         elif caps.hasTransport(TRANSPORT_ETHERNET):
             _band_mbps = 1000.0
@@ -160,7 +165,7 @@ def _detect_signal():
     except Exception:
         pass
 
-    # /proc/net/wireless (Android 9-)
+    # /proc/net/wireless fallback
     try:
         with open("/proc/net/wireless") as f:
             lines = f.readlines()
@@ -180,7 +185,7 @@ def _detect_signal():
     except Exception:
         pass
 
-    # sysfs operstate
+    # sysfs operstate fallback
     for p in glob.glob("/sys/class/net/wlan*/operstate"):
         try:
             with open(p) as f:
@@ -198,19 +203,50 @@ def _detect_signal():
         except Exception:
             pass
 
-    return "No Network"
+    return "No Signal"
+
+
+def _cellular_gen_fallback(ctx, Context):
+    """Try getNetworkTypeName without READ_PHONE_STATE — works on many devices."""
+    global _band_mbps
+    try:
+        from jnius import autoclass  # type: ignore
+        TM = autoclass("android.telephony.TelephonyManager")
+        tm = ctx.getSystemService(Context.TELEPHONY_SERVICE)
+        # getDataNetworkType() — no permission on Android 12+
+        for method in ("getDataNetworkType", "getNetworkType"):
+            try:
+                nt   = getattr(tm, method)()
+                name = TM.getNetworkTypeName(nt).upper()
+                if name in ("UNKNOWN", ""):
+                    continue
+                if   "NR"   in name: _band_mbps=500.0;  return "5G NR"
+                elif "LTE"  in name: _band_mbps=50.0;   return "4G LTE"
+                elif "HSPA" in name: _band_mbps=42.0;   return "3G HSPA+"
+                elif "UMTS" in name: _band_mbps=2.0;    return "3G"
+                elif "EDGE" in name: _band_mbps=0.2;    return "2G"
+                elif "GPRS" in name: _band_mbps=0.1;    return "2G"
+                elif "GSM"  in name: _band_mbps=0.1;    return "2G"
+                else: _band_mbps=10.0; return name[:8]
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return ""
 
 
 def _signal_worker():
     global _signal_str
+    time.sleep(0.5)
     while True:
         result = _detect_signal()
         if result:
-            _signal_str = result
+            with _lock:
+                _signal_str = result
         time.sleep(8)
 
 
-# ── Traffic bytes ───────────────────────────────────────────────────────────
+# ── Traffic bytes ────────────────────────────────────────────────────────────
 def _read_bytes():
     try:
         from jnius import autoclass  # type: ignore
@@ -236,8 +272,7 @@ def _read_bytes():
 
 
 def _fmt(bps):
-    if bps < 0:
-        bps = 0
+    if bps < 0: bps = 0
     kbps = bps / 1024.0
     if kbps >= 1024:
         return f"{kbps/1024:.1f} MB/s"
@@ -246,7 +281,7 @@ def _fmt(bps):
     return "0 KB/s"
 
 
-# ── Public API ──────────────────────────────────────────────────────────────
+# ── Public API ───────────────────────────────────────────────────────────────
 def get_network() -> dict:
     global _bg_started
 
@@ -257,22 +292,25 @@ def get_network() -> dict:
 
     rx, tx = _read_bytes()
     now    = time.time()
-    ping_str = f"{_ping_ms}ms" if _ping_ms is not None else "--"
+
+    with _lock:
+        ping_str   = f"{_ping_ms}ms" if _ping_ms is not None else "--"
+        signal_str = _signal_str
 
     if not _bw:
         _bw.update({"rx": rx, "tx": tx, "t": now,
                     "last_dl": "0 KB/s", "last_ul": "0 KB/s", "arc_pct": 0.0})
         return {"dl": "0 KB/s", "ul": "0 KB/s",
-                "ping": ping_str, "signal": _signal_str, "arc_pct": 0.0}
+                "ping": ping_str, "signal": signal_str, "arc_pct": 0.0}
 
     dt = now - _bw["t"]
     if dt < 0.5:
-        return {"dl":  _bw["last_dl"], "ul": _bw["last_ul"],
-                "ping": ping_str, "signal": _signal_str,
+        return {"dl": _bw["last_dl"], "ul": _bw["last_ul"],
+                "ping": ping_str, "signal": signal_str,
                 "arc_pct": _bw.get("arc_pct", 0.0)}
 
-    dl_bps = (rx - _bw["rx"]) / dt
-    ul_bps = (tx - _bw["tx"]) / dt
+    dl_bps = max(0.0, (rx - _bw["rx"]) / dt)
+    ul_bps = max(0.0, (tx - _bw["tx"]) / dt)
 
     max_bps = _band_mbps * 125_000
     arc_pct = min(100.0, dl_bps / max_bps * 100) if max_bps > 0 else 0.0
@@ -283,4 +321,4 @@ def get_network() -> dict:
                 "last_dl": dl_str, "last_ul": ul_str, "arc_pct": arc_pct})
 
     return {"dl": dl_str, "ul": ul_str,
-            "ping": ping_str, "signal": _signal_str, "arc_pct": arc_pct}
+            "ping": ping_str, "signal": signal_str, "arc_pct": arc_pct}
