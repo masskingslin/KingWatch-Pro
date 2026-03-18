@@ -1,25 +1,21 @@
 """
 KingWatch Pro v17 - core/fps.py
-
-REFRESH RATE FIX:
-  getRefreshRate() returns CURRENT rate (may be 60Hz in power-save on 120Hz phone).
-  Use getSupportedModes() to find the TRUE maximum refresh rate the display supports.
-
-GPU: Removed — not accessible without root on most Android devices.
-     Shows GPU frequency ratio as % if /sys/class/devfreq available.
+Shows actual FPS, current refresh rate AND max supported refresh rate.
+Uses getSupportedModes() for true max Hz (e.g. 120Hz phone showing 60Hz current).
+GPU via getattr() to avoid Python 3.11 cache bug.
 """
 import time
 import glob
-from kivy.clock import Clock
-
 
 class PerformanceMonitor:
     WINDOW = 20
 
     def __init__(self):
-        self._frames  = []
-        self._last    = time.perf_counter()
-        self._refresh = self._detect_max_refresh()
+        self._frames   = []
+        self._last     = time.perf_counter()
+        self._max_hz   = self._detect_max_refresh()
+        self._curr_hz  = self._max_hz
+        from kivy.clock import Clock
         Clock.schedule_interval(self._tick, 0)
 
     def _tick(self, dt):
@@ -31,115 +27,123 @@ class PerformanceMonitor:
             if len(self._frames) > self.WINDOW:
                 self._frames.pop(0)
 
-    def get_fps(self) -> int:
+    def get_fps(self):
         if len(self._frames) < 3:
             return 0
         avg = sum(self._frames) / len(self._frames)
-        return int(round(1.0 / avg)) if avg > 0 else 0
+        if avg > 0:
+            return int(round(1.0 / avg))
+        return 0
 
-    def get_gpu(self) -> str:
-        """
-        Try to get GPU utilisation. Returns percentage string or "N/A".
-        Most Android devices block this without root.
-        """
-        # Qualcomm Adreno
-        for p in (
-            "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
-            "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_load",
-        ):
+    def get_gpu(self):
+        # All via getattr to avoid Python 3.11 LOAD_ATTR cache bug
+        for p in ("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+                  "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_load"):
             try:
                 with open(p) as f:
-                    v = f.read().strip().split()[0].rstrip("%")
-                    return f"{int(float(v))}%"
+                    raw = f.read().strip().split()[0]
+                    v   = raw.rstrip("%")
+                    return str(int(float(v))) + "%"
             except Exception:
                 continue
-
-        # ARM Mali / generic
-        for pattern in (
-            "/sys/devices/platform/*/mali/utilization",
-            "/sys/devices/platform/mali*/utilization",
-            "/sys/class/misc/mali0/device/utilization",
-            "/sys/kernel/gpu/gpu_busy",
-        ):
+        for pattern in ("/sys/devices/platform/*/mali/utilization",
+                        "/sys/class/misc/mali0/device/utilization",
+                        "/sys/kernel/gpu/gpu_busy"):
             for p in glob.glob(pattern):
                 try:
                     with open(p) as f:
-                        v = f.read().strip().split()[0].rstrip("%")
-                        return f"{int(float(v))}%"
+                        raw = f.read().strip().split()[0]
+                        v   = raw.rstrip("%")
+                        return str(int(float(v))) + "%"
                 except Exception:
                     continue
-
-        # MediaTek GED
-        for p in (
-            "/sys/kernel/ged/hal/gpu_utilization",
-            "/proc/gpufreqv2/gpu_working_opp_table",
-        ):
+        for p in ("/sys/kernel/ged/hal/gpu_utilization",):
             try:
                 with open(p) as f:
                     for line in f:
-                        if any(k in line.lower() for k in ("util","load","busy")):
+                        if "util" in line.lower():
                             for tok in line.split():
                                 try:
                                     v = int(tok.strip("%:,"))
                                     if 0 <= v <= 100:
-                                        return f"{v}%"
+                                        return str(v) + "%"
                                 except Exception:
                                     pass
             except Exception:
-                continue
-
-        # Frequency ratio fallback (cur/max)
-        try:
-            cur_files = glob.glob("/sys/class/devfreq/*/cur_freq")
-            max_files = glob.glob("/sys/class/devfreq/*/max_freq")
-            for cf in cur_files:
-                mf = cf.replace("cur_freq", "max_freq")
-                if os.path.exists(mf):
-                    with open(cf) as f: cur = int(f.read().strip())
-                    with open(mf) as f: mx  = int(f.read().strip())
-                    if mx > 0:
-                        return f"{int(cur/mx*100)}%"
-        except Exception:
-            pass
-
+                pass
         return "N/A"
 
-    def get_refresh_rate(self) -> int:
-        return self._refresh
+    def get_refresh_rate(self):
+        """Return current active refresh rate."""
+        return self._curr_hz
 
-    def _detect_max_refresh(self) -> int:
+    def get_max_refresh_rate(self):
+        """Return maximum supported refresh rate of the display."""
+        return self._max_hz
+
+    def _detect_max_refresh(self):
         """
-        Get the MAXIMUM refresh rate the display supports.
-        Uses getSupportedModes() which returns all modes including 120/144Hz.
-        getRefreshRate() only returns current (may be 60 in power-save).
+        Use getSupportedModes() to get ALL display modes and find the max Hz.
+        getRefreshRate() only returns current (may be 60Hz in power-save on 120Hz device).
         """
-        # Strategy 1: getSupportedModes() — most accurate for high-refresh displays
+        # Strategy 1: getSupportedModes() — finds true max (120Hz, 144Hz etc)
         try:
             from jnius import autoclass  # type: ignore
-            act   = autoclass("org.kivy.android.PythonActivity").mActivity
-            disp  = act.getWindowManager().getDefaultDisplay()
-            modes = disp.getSupportedModes()
+            _PA   = autoclass("org.kivy.android.PythonActivity")
+            act   = getattr(_PA, 'mActivity')
+            _gWM  = getattr(act, 'getWindowManager')
+            wm    = _gWM()
+            _gDD  = getattr(wm, 'getDefaultDisplay')
+            disp  = _gDD()
+            # getSupportedModes returns Display.Mode[] array
+            _gSM  = getattr(disp, 'getSupportedModes')
+            modes = _gSM()
             rates = []
-            for mode in modes:
+            try:
+                # Java array — iterate by length
+                _len = getattr(modes, 'length')
+                for i in range(_len):
+                    try:
+                        mode = modes[i]
+                        _gRR = getattr(mode, 'getRefreshRate')
+                        r    = _gRR()
+                        rates.append(int(round(r)))
+                    except Exception:
+                        pass
+            except Exception:
+                # Python iterable fallback
                 try:
-                    rates.append(int(round(mode.getRefreshRate())))
+                    for mode in modes:
+                        try:
+                            _gRR = getattr(mode, 'getRefreshRate')
+                            r    = _gRR()
+                            rates.append(int(round(r)))
+                        except Exception:
+                            pass
                 except Exception:
                     pass
             if rates:
+                self._curr_hz = int(round(getattr(disp, 'getRefreshRate')()))
                 return max(rates)
         except Exception:
             pass
 
-        # Strategy 2: getRefreshRate() (current, may be lower than max)
+        # Strategy 2: getRefreshRate() current
         try:
             from jnius import autoclass  # type: ignore
-            act  = autoclass("org.kivy.android.PythonActivity").mActivity
-            disp = act.getWindowManager().getDefaultDisplay()
-            return int(round(disp.getRefreshRate()))
+            _PA   = autoclass("org.kivy.android.PythonActivity")
+            act   = getattr(_PA, 'mActivity')
+            _gWM  = getattr(act, 'getWindowManager')
+            wm    = _gWM()
+            _gDD  = getattr(wm, 'getDefaultDisplay')
+            disp  = _gDD()
+            _gRR  = getattr(disp, 'getRefreshRate')
+            r     = int(round(_gRR()))
+            return r
         except Exception:
             pass
 
-        # Strategy 3: /sys/class/graphics/fb0/modes
+        # Strategy 3: /sys fb0 modes (lists all supported modes)
         try:
             with open("/sys/class/graphics/fb0/modes") as f:
                 lines = f.readlines()
@@ -174,6 +178,3 @@ class PerformanceMonitor:
             pass
 
         return 60
-
-
-import os  # needed for gpu freq fallback
