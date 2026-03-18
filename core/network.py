@@ -1,264 +1,251 @@
 """
 KingWatch Pro v17 - core/network.py
-Ping: reads /proc/net/tcp RTO from ESTABLISHED connections (always works,
-no network call needed, no permissions, instant result).
+Based on working Android-safe implementation.
+
+KEY INSIGHTS FROM WORKING VERSION:
+- Ping in a background THREAD (socket.connect blocks - can't run in main loop)
+- Band via getLinkDownstreamBandwidthKbps() - NO READ_PHONE_STATE needed
+- TRANSPORT_CELLULAR=0, TRANSPORT_WIFI=1 (integer literals, not static fields)
+- Signal worker also runs in background thread (8s refresh)
+- arc_pct added: download speed vs band theoretical max
 """
-import time, os, socket
+import time, socket, threading, os, glob
 
-_prev_rx=0; _prev_tx=0; _prev_time=0.0
-_dl_buf=[]; _ul_buf=[]; _SMOOTH=4
-_band_cache=""; _band_age=99; _band_mbps=10.0
-_ping_cache=""; _ping_age=99  # 99 = run immediately on first call
+# ── shared state updated by background threads ─────────────────────────────
+_ping_ms    = None
+_signal_str = "Detecting..."
+_band_mbps  = 10.0        # theoretical max for arc % calculation
+_bg_started = False
 
-_jready=False; _TS=_PA=_CTX=None
-
-def _jinit():
-    global _jready,_TS,_PA,_CTX
-    if _jready: return True
-    try:
-        from jnius import autoclass  # type: ignore
-        _TS  = autoclass("android.net.TrafficStats")
-        _PA  = autoclass("org.kivy.android.PythonActivity")
-        _CTX = autoclass("android.content.Context")
-        _jready=True; return True
-    except Exception: return False
-
-_BAND_MBPS={
-    "2G GPRS":0.1,"2G EDGE":0.2,"2G GSM":0.1,"2G CDMA":0.1,
-    "3G UMTS":2.0,"3G HSDPA":14.0,"3G HSUPA":5.7,"3G HSPA":14.0,
-    "3G HSPA+":42.0,"3G EVDO":3.1,"3G eHRPD":14.0,
-    "4G LTE":50.0,"4G LTE-CA":150.0,"4G TDD-LTE":50.0,
-    "5G NR":500.0,"WiFi":100.0,"WiFi 5GHz":300.0,"WiFi 2.4GHz":100.0,
-}
+# ── bandwidth state ────────────────────────────────────────────────────────
+_bw = {}
 
 
-def _get_bytes():
-    if _jinit():
-        try:
-            rx=_TS.getTotalRxBytes(); tx=_TS.getTotalTxBytes()
-            if rx>0: return int(rx),int(tx)
-        except Exception: pass
-    rx=tx=0
-    try:
-        with open("/proc/net/dev") as f:
-            for ln in f.readlines()[2:]:
-                if ":"not in ln: continue
-                ifc,d=ln.split(":",1)
-                if ifc.strip()=="lo": continue
-                c=d.split()
-                if len(c)>=9: rx+=int(c[0]); tx+=int(c[8])
-    except Exception: pass
-    return rx,tx
-
-
-def _smooth(buf,v,n):
-    buf.append(v)
-    if len(buf)>n: buf.pop(0)
-    return sum(buf)/len(buf)
-
-
-def _human(bps):
-    if bps>=1_048_576: return f"{bps/1_048_576:.1f}MB/s"
-    if bps>=1024:      return f"{bps/1024:.0f}KB/s"
-    return f"{int(bps)}B/s"
-
-
-def _ping():
-    """
-    Read RTT from /proc/net/tcp ESTABLISHED connections.
-    Column 12 (hex) = retransmit timeout in jiffies (250Hz = 4ms each).
-    RTT ≈ RTO / 6  for stable connections (Linux TCP sets RTO = max(RTT*2, 200ms)).
-    This requires NO network call, NO permissions, works instantly.
-    """
-    best = None
-    for path in ("/proc/net/tcp6", "/proc/net/tcp"):
-        try:
-            with open(path) as f:
-                lines = f.readlines()[1:]
-            for ln in lines[:60]:
-                cols = ln.split()
-                if len(cols) < 13:
-                    continue
-                state = cols[3]
-                if state != "01":   # 01 = ESTABLISHED only
-                    continue
-                try:
-                    rto_jiffies = int(cols[12], 16)
-                    # jiffies at 250Hz = 4ms each
-                    rto_ms = rto_jiffies * 4
-                    # RTT estimate: RTO is ~200ms min + 2*RTT
-                    # For rto_ms > 200: rtt = (rto_ms - 200) / 2
-                    # For rto_ms <= 200: connection is very fast, estimate ~10ms
-                    if rto_ms <= 0:
-                        continue
-                    if rto_ms <= 200:
-                        rtt = max(1, rto_ms // 4)
-                    else:
-                        rtt = max(1, (rto_ms - 200) // 2)
-                    if 1 <= rtt <= 2000:
-                        if best is None or rtt < best:
-                            best = rtt
-                except Exception:
-                    continue
-        except Exception:
-            continue
-
-    if best is not None:
-        return f"{best}ms"
-
-    # Fallback: TCP SYN timing to Google DNS (no data transfer, just SYN+RST)
-    for ip, port in [("8.8.8.8", 53), ("1.1.1.1", 53), ("8.8.4.4", 443)]:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(2.0)
-            t0 = time.monotonic()
-            err = s.connect_ex((ip, port))
-            ms  = int((time.monotonic() - t0) * 1000)
-            s.close()
-            if ms < 3000:
-                return f"{ms}ms"
-        except Exception:
-            continue
-
-    return "--"
-
-
-def _detect_band():
-    global _band_mbps
-    if not _jinit(): return _iface_band()
-    ctx = _PA.mActivity
-
-    # WiFi (no permission needed)
-    try:
-        wm   = ctx.getSystemService(_CTX.WIFI_SERVICE)
-        info = wm.getConnectionInfo()
-        rssi = info.getRssi()
-        if -120 < rssi < 0:
-            freq = 0
-            try: freq = info.getFrequency()
-            except Exception: pass
-            if freq >= 5000:
-                _band_mbps=300.0; return f"WiFi 5GHz {rssi}dBm"
-            elif freq >= 2400:
-                _band_mbps=100.0; return f"WiFi 2.4GHz {rssi}dBm"
-            _band_mbps=100.0; return f"WiFi {rssi}dBm"
-    except Exception: pass
-
-    # Cellular via TelephonyManager.getNetworkTypeName (static, string-based)
-    try:
-        from jnius import autoclass  # type: ignore
-        TM = autoclass("android.telephony.TelephonyManager")
-        tm = ctx.getSystemService(_CTX.TELEPHONY_SERVICE)
-        for method in ("getDataNetworkType", "getNetworkType"):
+# ── background: ping ───────────────────────────────────────────────────────
+def _ping_worker():
+    global _ping_ms
+    while True:
+        for host, port in [("8.8.8.8", 53), ("1.1.1.1", 53), ("8.8.4.4", 443)]:
             try:
-                nt   = getattr(tm, method)()
-                name = TM.getNetworkTypeName(nt)
-                if name and name.upper() not in ("UNKNOWN", ""):
-                    return _name_to_band(name)
-            except Exception: continue
-        # Carrier name as last resort
-        try:
-            op = tm.getNetworkOperatorName()
-            if op and len(str(op)) > 0:
-                _band_mbps=10.0; return f"Mobile"
-        except Exception: pass
-    except Exception: pass
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(2)
+                t0 = time.time()
+                s.connect((host, port))
+                s.close()
+                _ping_ms = round((time.time() - t0) * 1000, 1)
+                break
+            except Exception:
+                _ping_ms = None
+                continue
+        time.sleep(5)
 
-    # ConnectivityManager.getActiveNetworkInfo (deprecated but universal)
+
+# ── background: band/signal detection ─────────────────────────────────────
+def _signal_worker():
+    global _signal_str
+    while True:
+        _signal_str = _detect_signal()
+        time.sleep(8)
+
+
+def _detect_signal():
+    global _band_mbps
+
+    # ── ConnectivityManager + NetworkCapabilities (API 21+, NO permission) ──
     try:
-        cm = ctx.getSystemService(_CTX.CONNECTIVITY_SERVICE)
-        ni = cm.getActiveNetworkInfo()
-        if ni and ni.isConnected():
-            tn = str(ni.getTypeName()).upper()
-            sn = str(ni.getSubtypeName()).upper()
-            if "WIFI" in tn:
-                _band_mbps=100.0; return "WiFi"
-            if sn and sn not in ("","UNKNOWN"):
-                return _name_to_band(sn)
-            if "MOBILE" in tn or "CELLULAR" in tn:
-                _band_mbps=10.0; return "Mobile"
-    except Exception: pass
+        from jnius import autoclass  # type: ignore
+        Context             = autoclass("android.content.Context")
+        PythonActivity      = autoclass("org.kivy.android.PythonActivity")
+        NetworkCapabilities = autoclass("android.net.NetworkCapabilities")
 
-    return _iface_band()
+        cm   = PythonActivity.mActivity.getSystemService(Context.CONNECTIVITY_SERVICE)
+        net  = cm.getActiveNetwork()
+        if net is None:
+            return "No Network"
 
+        caps = cm.getNetworkCapabilities(net)
+        if caps is None:
+            return "Unknown"
 
-def _name_to_band(name):
-    global _band_mbps
-    n = name.upper()
-    if   "NR"    in n: _band_mbps=500.0;  return "5G NR"
-    elif "LTE"   in n and "CA" in n: _band_mbps=150.0; return "4G LTE-CA"
-    elif "LTE"   in n: _band_mbps=50.0;   return "4G LTE"
-    elif "HSPA"  in n: _band_mbps=42.0;   return "3G HSPA+"
-    elif "HSDPA" in n: _band_mbps=14.0;   return "3G HSDPA"
-    elif "HSUPA" in n: _band_mbps=5.7;    return "3G HSUPA"
-    elif "UMTS"  in n: _band_mbps=2.0;    return "3G UMTS"
-    elif "EVDO"  in n: _band_mbps=3.1;    return "3G EVDO"
-    elif "EDGE"  in n: _band_mbps=0.2;    return "2G EDGE"
-    elif "GPRS"  in n: _band_mbps=0.1;    return "2G GPRS"
-    elif "GSM"   in n: _band_mbps=0.1;    return "2G GSM"
-    elif "CDMA"  in n: _band_mbps=0.1;    return "2G CDMA"
-    elif "WIFI"  in n: _band_mbps=100.0;  return "WiFi"
-    _band_mbps=10.0; return name[:12]
+        # Integer literals — avoids static field access issues in pyjnius
+        TRANSPORT_CELLULAR = 0
+        TRANSPORT_WIFI     = 1
+        TRANSPORT_ETHERNET = 3
 
+        if caps.hasTransport(TRANSPORT_WIFI):
+            try:
+                wm   = PythonActivity.mActivity.getSystemService(Context.WIFI_SERVICE)
+                info = wm.getConnectionInfo()
+                rssi = info.getRssi()
+                speed = info.getLinkSpeed()          # Mbps
+                freq  = info.getFrequency()          # MHz
+                band  = "5GHz" if freq >= 5000 else "2.4GHz"
+                q     = ("Excellent" if rssi >= -50 else
+                         "Good"      if rssi >= -65 else
+                         "Fair"      if rssi >= -75 else "Weak")
+                _band_mbps = 300.0 if freq >= 5000 else 100.0
+                return f"WiFi {band} {rssi}dBm {q}"
+            except Exception:
+                _band_mbps = 100.0
+                return "WiFi"
 
-def _iface_band():
-    global _band_mbps
+        elif caps.hasTransport(TRANSPORT_CELLULAR):
+            # getLinkDownstreamBandwidthKbps — API 29+, NO permission needed
+            try:
+                dl_kbps = caps.getLinkDownstreamBandwidthKbps()
+                ul_kbps = caps.getLinkUpstreamBandwidthKbps()
+                if dl_kbps >= 50000:
+                    gen = "5G NR";    _band_mbps = 500.0
+                elif dl_kbps >= 5000:
+                    gen = "4G LTE";   _band_mbps = 50.0
+                elif dl_kbps >= 1000:
+                    gen = "4G LTE";   _band_mbps = 20.0
+                elif dl_kbps >= 200:
+                    gen = "3G";       _band_mbps = 14.0
+                elif dl_kbps > 0:
+                    gen = "2G";       _band_mbps = 0.2
+                else:
+                    gen = "Mobile";   _band_mbps = 10.0
+                dl_m = dl_kbps // 1000
+                ul_m = ul_kbps // 1000
+                return f"{gen} {dl_m}↓{ul_m}↑Mbps"
+            except Exception:
+                _band_mbps = 10.0
+                return "Mobile"
+
+        elif caps.hasTransport(TRANSPORT_ETHERNET):
+            _band_mbps = 100.0
+            return "Ethernet"
+
+        return "Connected"
+
+    except Exception:
+        pass
+
+    # ── /proc/net/wireless (Android 9 and below) ─────────────────────────
     try:
         with open("/proc/net/wireless") as f:
-            for i,ln in enumerate(f):
-                if i<2: continue
-                p=ln.split()
-                if len(p)>=4:
-                    try:
-                        dbm=int(float(p[3].rstrip(".")))
-                        if dbm>0: dbm-=256
-                        if -120<dbm<0:
-                            _band_mbps=100.0; return f"WiFi {dbm}dBm"
-                    except Exception: pass
-    except Exception: pass
+            lines = f.readlines()
+        for line in lines[2:]:
+            p = line.split()
+            if len(p) >= 4:
+                try:
+                    dbm = int(float(p[2].rstrip(".")))
+                    if dbm < 0:
+                        q = ("Excellent" if dbm >= -50 else
+                             "Good"      if dbm >= -65 else
+                             "Fair"      if dbm >= -75 else "Weak")
+                        _band_mbps = 100.0
+                        return f"WiFi {dbm}dBm {q}"
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # ── sysfs interface operstate ─────────────────────────────────────────
+    for p in glob.glob("/sys/class/net/wlan*/operstate"):
+        try:
+            with open(p) as f:
+                if f.read().strip() == "up":
+                    _band_mbps = 100.0
+                    return "WiFi"
+        except Exception:
+            pass
+    for p in glob.glob("/sys/class/net/rmnet*/operstate"):
+        try:
+            with open(p) as f:
+                if f.read().strip() == "up":
+                    _band_mbps = 10.0
+                    return "Mobile"
+        except Exception:
+            pass
+
+    return "No Network"
+
+
+# ── bandwidth ──────────────────────────────────────────────────────────────
+def _read_bytes():
     try:
-        for ifc in sorted(os.listdir("/sys/class/net")):
-            try:
-                with open(f"/sys/class/net/{ifc}/operstate") as f:
-                    if f.read().strip() not in ("up","unknown"): continue
-            except Exception: continue
-            if ifc.startswith(("wlan","wlp","wifi")): _band_mbps=100.0; return "WiFi"
-            if ifc.startswith(("rmnet","ccmni","seth","wwan","ppp","qmi")): _band_mbps=10.0; return "Mobile"
-    except Exception: pass
-    return ""
+        from jnius import autoclass  # type: ignore
+        ts = autoclass("android.net.TrafficStats")
+        rx = ts.getTotalRxBytes()
+        tx = ts.getTotalTxBytes()
+        if rx >= 0 and tx >= 0:
+            return int(rx), int(tx)
+    except Exception:
+        pass
+    rx = tx = 0
+    try:
+        with open("/proc/net/dev") as f:
+            for line in f.readlines()[2:]:
+                p = line.split()
+                if len(p) < 10 or p[0].rstrip(":") == "lo":
+                    continue
+                rx += int(p[1])
+                tx += int(p[9])
+    except Exception:
+        pass
+    return rx, tx
 
 
+def _fmt(bps):
+    if bps < 0: bps = 0
+    kbps = bps / 1024.0
+    if kbps >= 1024:
+        return f"{kbps/1024:.1f} MB/s"
+    if kbps >= 1:
+        return f"{kbps:.0f} KB/s"
+    return "0 KB/s"
+
+
+# ── public API ─────────────────────────────────────────────────────────────
 def get_network() -> dict:
-    global _prev_rx,_prev_tx,_prev_time,_band_cache,_band_age,_ping_cache,_ping_age
+    global _bg_started
 
-    now=time.monotonic()
-    rx,tx=_get_bytes()
-    elapsed=max(0.5,now-_prev_time) if _prev_time>0 else 1.0
-    dl_r=(rx-_prev_rx)/elapsed if (_prev_rx>0 and rx>_prev_rx) else 0.0
-    ul_r=(tx-_prev_tx)/elapsed if (_prev_tx>0 and tx>_prev_tx) else 0.0
-    _prev_rx=rx; _prev_tx=tx; _prev_time=now
+    # Start background threads once
+    if not _bg_started:
+        _bg_started = True
+        threading.Thread(target=_ping_worker,   daemon=True).start()
+        threading.Thread(target=_signal_worker, daemon=True).start()
 
-    dl=_smooth(_dl_buf,dl_r,_SMOOTH)
-    ul=_smooth(_ul_buf,ul_r,_SMOOTH)
+    rx, tx = _read_bytes()
+    now    = time.time()
 
-    max_bps=_band_mbps*125_000
-    arc=min(100.0,dl/max_bps*100) if max_bps>0 else 0.0
+    ping_str = f"{_ping_ms}ms" if _ping_ms is not None else "--"
 
-    _band_age+=1
-    if _band_age>=5:
-        b=_detect_band()
-        if b: _band_cache=b
-        _band_age=0
+    if not _bw:
+        _bw.update({"rx": rx, "tx": tx, "t": now,
+                    "last_dl": "0 KB/s", "last_ul": "0 KB/s"})
+        return {
+            "dl": "0 KB/s", "ul": "0 KB/s",
+            "ping": ping_str, "signal": _signal_str,
+            "arc_pct": 0.0,
+        }
 
-    _ping_age+=1
-    if _ping_age>=3:   # refresh every 3 seconds
-        _ping_cache=_ping()
-        _ping_age=0
+    dt = now - _bw["t"]
+    if dt < 0.5:
+        return {
+            "dl":  _bw["last_dl"], "ul": _bw["last_ul"],
+            "ping": ping_str, "signal": _signal_str,
+            "arc_pct": _bw.get("arc_pct", 0.0),
+        }
+
+    dl_bps = (rx - _bw["rx"]) / dt
+    ul_bps = (tx - _bw["tx"]) / dt
+
+    # Arc % = current download vs band theoretical max
+    max_bps = _band_mbps * 125_000   # Mbps → bytes/s
+    arc_pct = min(100.0, dl_bps / max_bps * 100) if max_bps > 0 else 0.0
+
+    dl_str = _fmt(dl_bps)
+    ul_str = _fmt(ul_bps)
+    _bw.update({"rx": rx, "tx": tx, "t": now,
+                "last_dl": dl_str, "last_ul": ul_str, "arc_pct": arc_pct})
 
     return {
-        "dl":     _human(dl),
-        "ul":     _human(ul),
-        "signal": _band_cache or "Detecting",
-        "ping":   _ping_cache or "--",
-        "arc_pct":arc,
+        "dl":     dl_str,
+        "ul":     ul_str,
+        "ping":   ping_str,
+        "signal": _signal_str,
+        "arc_pct": arc_pct,
     }
