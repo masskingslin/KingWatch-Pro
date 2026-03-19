@@ -216,7 +216,7 @@ class KingwatchApp(App):
         rw  = RootWidget()
         setattr(self, 'monitor',     mon)
         setattr(self, 'root_widget', rw)
-        getattr(rw, 'apply_theme')("Dark Pro")
+        getattr(rw, 'apply_theme')("K-DroidSentinel")
         getattr(rw, 'tick_clock')(0)
         self._fps(0)
         self._stats(0)
