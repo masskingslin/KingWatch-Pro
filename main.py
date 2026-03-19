@@ -1,13 +1,8 @@
 """
 KingWatch Pro v17 - main.py
 KingwatchApp -> auto-loads kingwatch.kv. No Builder.load_file.
-
-KEY FIX: Each card update in its OWN function.
-This gives each function a fresh LOAD_ATTR cache - prevents
-Python 3.11 specializing interpreter from confusing r.ids.network_card
-with r.ids.cpu_card (same cache slot, different functions = no conflict).
-
-No emoji, no unicode characters anywhere.
+Each card in its own function to avoid Python 3.11 LOAD_ATTR cache collisions.
+No unicode, no emoji.
 """
 import time as _time
 from kivy.app import App
@@ -51,8 +46,9 @@ class RootWidget(BoxLayout):
         self.danger   = h(t["DANGER"])
         self.text_col = h(t["TEXT"])
         self.dim_col  = h(t["DIM"])
-        dim = h(t["DIM"]); txt = h(t["TEXT"])
-        self.sub_col  = [(dim[i]+txt[i])/2 for i in range(4)]
+        dim = h(t["DIM"])
+        txt = h(t["TEXT"])
+        self.sub_col = [(dim[i] + txt[i]) / 2 for i in range(4)]
 
     def cycle_theme(self):
         self.theme_idx = (self.theme_idx + 1) % len(THEME_NAMES)
@@ -65,118 +61,106 @@ class RootWidget(BoxLayout):
         self.clock_str = _time.strftime("%H:%M:%S")
 
 
-# -- Isolated card update functions --
-# Each in its own function = fresh LOAD_ATTR cache = no slot collision
+# Each card update in its own function.
+# Prevents Python 3.11 specializing interpreter from reusing
+# LOAD_ATTR cache slots across different card references.
 
-def _update_fps_card(ids, fps, max_fps, gpu, curr_hz, max_hz):
+def _do_fps(ids, monitor):
+    fps     = monitor.get_fps()
+    max_fps = monitor.get_max_fps()
+    gpu     = monitor.get_gpu()
+    curr_hz = monitor.get_refresh_rate()
+    max_hz  = monitor.get_max_refresh_rate()
     if 0 < max_hz:
         pct = min(100, fps * 100 // max_hz)
     else:
         pct = 0
-    c = getattr(ids, 'fps_card')
-    getattr(c, '__setattr__')('value',   str(fps) + " FPS")
-    getattr(c, '__setattr__')('subtitle',"Max: " + str(max_fps) + " FPS")
+    c = ids.fps_card
+    c.value   = str(fps) + " FPS"
+    c.subtitle = "Max: " + str(max_fps) + " FPS"
     if curr_hz == max_hz:
         hz = "Refresh: " + str(curr_hz) + " Hz"
     else:
         hz = str(curr_hz) + "Hz (max " + str(max_hz) + "Hz)"
     if gpu == "N/A":
-        getattr(c, '__setattr__')('detail1', hz)
+        c.detail1 = hz
     else:
-        getattr(c, '__setattr__')('detail1', hz + "  GPU:" + gpu)
-    getattr(c, '__setattr__')('bar_pct', pct)
+        c.detail1 = hz + "  GPU:" + gpu
+    c.bar_pct = pct
 
 
-def _update_cpu_card(ids, cpu):
-    mx = 0
-    try:
-        mx = cpu["max_freq"]
-    except Exception:
-        pass
-    c = getattr(ids, 'cpu_card')
-    getattr(c,'__setattr__')('value',
-        str(round(cpu["usage"],1)) + "%")
-    getattr(c,'__setattr__')('subtitle',
-        str(cpu["freq"]) + "/" + str(mx) + " MHz")
-    getattr(c,'__setattr__')('detail1',
-        str(cpu["cores"]) + " Cores  Procs:" + str(cpu["procs"]))
-    getattr(c,'__setattr__')('bar_pct', cpu["usage"])
+def _do_cpu(ids):
+    d  = get_cpu()
+    mx = d["max_freq"]
+    c  = ids.cpu_card
+    c.value    = str(round(d["usage"], 1)) + "%"
+    c.subtitle = str(d["freq"]) + "/" + str(mx) + " MHz"
+    c.detail1  = str(d["cores"]) + " Cores  Procs:" + str(d["procs"])
+    c.bar_pct  = d["usage"]
 
 
-def _update_ram_card(ids, pct, label, free_label):
-    c = getattr(ids, 'ram_card')
-    getattr(c,'__setattr__')('value',    str(round(pct,1)) + "%")
-    getattr(c,'__setattr__')('subtitle', label)
-    getattr(c,'__setattr__')('detail1',  free_label)
-    getattr(c,'__setattr__')('bar_pct',  pct)
+def _do_ram(ids):
+    pct, lbl, free = get_ram()
+    c = ids.ram_card
+    c.value    = str(round(pct, 1)) + "%"
+    c.subtitle = lbl
+    c.detail1  = free
+    c.bar_pct  = pct
 
 
-def _update_battery_card(ids, b):
-    c = getattr(ids, 'battery_card')
-    getattr(c,'__setattr__')('value',    str(b["pct"]) + "%")
-    getattr(c,'__setattr__')('subtitle', b["eta"])
-    getattr(c,'__setattr__')('detail1',
-        str(b["current"]) + "  " + str(b["volt"]) + "  Temp:" + str(b["temp"]))
-    getattr(c,'__setattr__')('bar_pct',  b["pct"])
+def _do_battery(ids):
+    d = get_battery()
+    c = ids.battery_card
+    c.value    = str(d["pct"]) + "%"
+    c.subtitle = d["eta"]
+    c.detail1  = str(d["current"]) + "  " + str(d["volt"]) + "  Temp:" + str(d["temp"])
+    c.bar_pct  = d["pct"]
 
 
-def _update_network_card(ids, net):
-    # Read dict values directly - no .get() method call (compiles wrong)
-    sig   = net["signal"]
-    rssi  = net["rssi"]
-    bwmax = net["bwmax"]
-    dl    = net["dl"]
-    ul    = net["ul"]
-    arc   = net["arc_pct"]
-
-    if rssi:
-        detail = sig + "  " + rssi
-    else:
-        detail = sig
-    if bwmax:
-        detail = detail + "  " + bwmax
-
-    c = getattr(ids, 'network_card')
-    getattr(c,'__setattr__')('value',    dl)
-    getattr(c,'__setattr__')('subtitle', "Up: " + ul)
-    getattr(c,'__setattr__')('detail1',  detail)
-    getattr(c,'__setattr__')('bar_pct',  arc)
+def _do_network(ids):
+    # get_network returns only 4 simple keys: dl, ul, sig, arc
+    d   = get_network()
+    dl  = d["dl"]
+    ul  = d["ul"]
+    sig = d["sig"]
+    arc = d["arc"]
+    c = ids.network_card
+    c.value    = dl
+    c.subtitle = "Up: " + ul
+    c.detail1  = sig
+    c.bar_pct  = arc
 
 
-def _update_storage_card(ids, s):
-    c = getattr(ids, 'storage_card')
-    getattr(c,'__setattr__')('value',
-        str(round(s["pct"],1)) + "%")
-    getattr(c,'__setattr__')('subtitle',
-        s["used"] + " / " + s["total"])
-    getattr(c,'__setattr__')('detail1',
-        "Free: " + s["free"])
-    getattr(c,'__setattr__')('bar_pct', s["pct"])
+def _do_storage(ids):
+    d = get_storage()
+    c = ids.storage_card
+    c.value    = str(round(d["pct"], 1)) + "%"
+    c.subtitle = d["used"] + " / " + d["total"]
+    c.detail1  = "Free: " + d["free"]
+    c.bar_pct  = d["pct"]
 
 
-def _update_thermal_card(ids, th, mode):
+def _do_thermal(ids, mode):
+    d = get_thermal()
     if mode in (0,):
-        t = th["cpu"]; maxl = th["cpu_max"]; lbl = "CPU"
+        t = d["cpu"]; maxl = d["cpu_max"]; lbl = "CPU"
     elif mode in (1,):
-        t = th["gpu"]; maxl = th["gpu_max"]; lbl = "GPU"
+        t = d["gpu"]; maxl = d["gpu_max"]; lbl = "GPU"
     else:
-        t = th["batt"]; maxl = th["batt_max"]; lbl = "Battery"
+        t = d["batt"]; maxl = d["batt_max"]; lbl = "Battery"
     if 0 < maxl:
         pct = min(100, t / maxl * 100)
     else:
         pct = 0
-    # No emoji - ASCII only
-    if not (th["cpu"] < 80):
+    if not (d["cpu"] < 80):
         warn = "  THROTTLE!"
     else:
         warn = ""
-    c = getattr(ids, 'thermal_card')
-    getattr(c,'__setattr__')('value',
-        str(t) + "C")
-    getattr(c,'__setattr__')('subtitle',
-        lbl + ": " + str(t) + "C / " + str(maxl) + "C" + warn)
-    getattr(c,'__setattr__')('detail1', th["detail"])
-    getattr(c,'__setattr__')('bar_pct', pct)
+    c = ids.thermal_card
+    c.value    = str(t) + "C"
+    c.subtitle = lbl + ": " + str(t) + "C / " + str(maxl) + "C" + warn
+    c.detail1  = d["detail"]
+    c.bar_pct  = pct
 
 
 class KingwatchApp(App):
@@ -189,46 +173,28 @@ class KingwatchApp(App):
         self.root_widget = RootWidget()
         self.root_widget.apply_theme("Dark Pro")
         self.root_widget.tick_clock(0)
-        self._do_fps(0)
-        self._do_stats(0)
-        Clock.schedule_interval(self._do_fps,   0.5)
-        Clock.schedule_interval(self._do_stats, 1.0)
+        self._fps(0)
+        self._stats(0)
+        Clock.schedule_interval(self._fps,   0.5)
+        Clock.schedule_interval(self._stats, 1.0)
         Clock.schedule_interval(self.root_widget.tick_clock, 1.0)
         return self.root_widget
 
-    def _do_fps(self, dt):
-        ids     = self.root_widget.ids
-        fps     = self.monitor.get_fps()
-        max_fps = self.monitor.get_max_fps()
-        gpu     = self.monitor.get_gpu()
-        curr_hz = self.monitor.get_refresh_rate()
-        max_hz  = self.monitor.get_max_refresh_rate()
-        _update_fps_card(ids, fps, max_fps, gpu, curr_hz, max_hz)
+    def _fps(self, dt):
+        _do_fps(self.root_widget.ids, self.monitor)
 
-    def _do_stats(self, dt):
+    def _stats(self, dt):
         ids = self.root_widget.ids
-
-        cpu = get_cpu()
-        _update_cpu_card(ids, cpu)
-
-        ram_pct, ram_lbl, ram_free = get_ram()
-        _update_ram_card(ids, ram_pct, ram_lbl, ram_free)
-
-        b = get_battery()
-        _update_battery_card(ids, b)
-
-        net = get_network()
-        _update_network_card(ids, net)
-
-        s = get_storage()
-        _update_storage_card(ids, s)
-
-        th = get_thermal()
+        _do_cpu(ids)
+        _do_ram(ids)
+        _do_battery(ids)
+        _do_network(ids)
+        _do_storage(ids)
         self._thermal_tick = self._thermal_tick + 1
         if not (self._thermal_tick < 10):
             self._thermal_tick = 0
             self._thermal_mode = (self._thermal_mode + 1) % 3
-        _update_thermal_card(ids, th, self._thermal_mode)
+        _do_thermal(ids, self._thermal_mode)
 
 
 if __name__ == "__main__":
