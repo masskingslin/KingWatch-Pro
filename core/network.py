@@ -1,31 +1,59 @@
 """
 KingWatch Pro v17 - core/network.py
-
-HYBRID BAND DETECTION MATRIX:
-  Layer 1: TelephonyManager.getDataNetworkType()  (primary, most accurate)
-  Layer 2: NetworkCapabilities.getLinkDownstreamBandwidthKbps() (no permission)
-  Layer 3: Heuristic from actual measured speed (always works)
-  Layer 4: sysfs interface name fallback
-
-Band is determined by best available source, updated every 5s.
-Returns keys: dl, ul, sig, arc
+Hybrid band detection + ping via background thread.
+Returns keys: dl, ul, sig, ping, arc
 """
 import time as _time
 import glob
 from threading import Thread as _Thread
 
 _signal   = "Detecting..."
+_ping_str = "--"
 _started  = False
 _bw       = {}
 _dl       = 0.0
 _ul       = 0.0
 _EMA      = 0.4
 _band_bps = 10.0 * 125000
-
-# Speed history for heuristic (last 10 samples in bytes/s)
-_speed_hist = []
+_spdhist  = []   # speed history for heuristic
 
 
+# -- Ping ------------------------------------------------------------------
+def _ping_once():
+    """TCP connect ping - all via getattr to avoid Python 3.11 cache bug."""
+    _sk          = __import__('socket')
+    _AF_INET     = getattr(_sk, 'AF_INET')
+    _SOCK_STREAM = getattr(_sk, 'SOCK_STREAM')
+    _SocketCls   = getattr(_sk, 'socket')
+    _now         = getattr(_time, 'time')
+    for ip, port in [("8.8.8.8", 53), ("1.1.1.1", 443)]:
+        try:
+            s   = _SocketCls(_AF_INET, _SOCK_STREAM)
+            _st = getattr(s, 'settimeout')
+            _cx = getattr(s, 'connect_ex')
+            _cl = getattr(s, 'close')
+            _st(2.0)
+            t0  = _now()
+            res = _cx((ip, port))
+            ms  = round((_now() - t0) * 1000)
+            _cl()
+            if not res:   # res == 0 means connected
+                return str(ms) + "ms"
+        except Exception:
+            pass
+    return "--"
+
+
+def _ping_loop():
+    global _ping_str
+    _sleep = getattr(_time, 'sleep')
+    _sleep(3)
+    while True:
+        _ping_str = _ping_once()
+        _sleep(8)
+
+
+# -- Band detection ---------------------------------------------------------
 def _quality(dbm):
     if -50 < dbm: return "Excellent"
     if -60 < dbm: return "Good"
@@ -34,61 +62,17 @@ def _quality(dbm):
     return "Poor"
 
 
-def _heuristic_band(dl_bps):
-    """
-    Layer 3: Classify band from actual measured speed.
-    Uses median of recent speed history for stability.
-    """
+def _heuristic(dl_bps):
+    """Layer 3: classify band from measured speed median."""
     global _band_bps
-    if len(_speed_hist) < 3:
+    if len(_spdhist) < 3:
         return ""
-    samples = sorted(_speed_hist)
-    med = samples[len(samples) // 2]
+    med  = sorted(_spdhist)[len(_spdhist) // 2]
     mbps = med / 125000.0
     if 50.0 < mbps:  _band_bps = 500.0*125000; return "5G (speed)"
     if 10.0 < mbps:  _band_bps = 50.0*125000;  return "4G LTE (speed)"
     if 1.0  < mbps:  _band_bps = 14.0*125000;  return "3G (speed)"
     if 0.05 < mbps:  _band_bps = 2.0*125000;   return "2G (speed)"
-    return ""
-
-
-def _telephony_band(ctx, Ctx):
-    """Layer 1: TelephonyManager - most accurate when available."""
-    global _band_bps
-    try:
-        from jnius import autoclass  # type: ignore
-        TM = autoclass("android.telephony.TelephonyManager")
-        tm = getattr(ctx, 'getSystemService')(getattr(Ctx, 'TELEPHONY_SERVICE'))
-        nt = getattr(tm, 'getDataNetworkType')()
-        if nt in (0,):   return ""  # UNKNOWN - try next layer
-        if nt in (20,):  _band_bps=500.0*125000;  return "5G NR  Max 500Mbps"
-        if nt in (13,):  _band_bps=50.0*125000;   return "4G LTE  Max 50Mbps"
-        if nt in (19,):  _band_bps=150.0*125000;  return "4G LTE-CA  Max 150Mbps"
-        if nt in (15,):  _band_bps=42.0*125000;   return "4G HSPA+  Max 42Mbps"
-        if nt in (8,9,10,3,5,6,12,14):
-            _band_bps=14.0*125000; return "3G  Max 14Mbps"
-        if nt in (1,2,4,7,11,16):
-            _band_bps=0.2*125000;  return "2G  Max 0.2Mbps"
-        _band_bps=10.0*125000; return "Mobile"
-    except Exception:
-        pass
-    return ""
-
-
-def _caps_band(caps):
-    """Layer 2: NetworkCapabilities bandwidth estimate - no permission needed."""
-    global _band_bps
-    try:
-        _gDL = getattr(caps, 'getLinkDownstreamBandwidthKbps')
-        dl   = _gDL()
-        if 0 < dl:
-            if 50000 < dl:   _band_bps=500.0*125000;  return "5G  ~" + str(dl//1000) + "Mbps"
-            if 5000  < dl:   _band_bps=50.0*125000;   return "4G LTE  ~" + str(dl//1000) + "Mbps"
-            if 1000  < dl:   _band_bps=20.0*125000;   return "4G  ~" + str(dl//1000) + "Mbps"
-            if 200   < dl:   _band_bps=14.0*125000;   return "3G  ~" + str(dl//1000) + "Mbps"
-            _band_bps=0.2*125000;  return "2G  ~" + str(dl) + "Kbps"
-    except Exception:
-        pass
     return ""
 
 
@@ -125,27 +109,46 @@ def _detect():
             except Exception:
                 _band_bps = 100.0*125000; return "WiFi"
 
-        # Cellular - hybrid matrix
+        # Cellular - Layer 1: TelephonyManager
         if _hT(0):
-            # Layer 1: TelephonyManager
-            result = _telephony_band(ctx, Ctx)
-            if result:
-                return result
-            # Layer 2: NetworkCapabilities bandwidth
-            result = _caps_band(caps)
-            if result:
-                return result
-            # Layer 3: Heuristic from speed history
-            result = _heuristic_band(_dl)
-            if result:
-                return result
-            # All failed - show Mobile
-            _band_bps = 10.0*125000
-            return "Mobile"
+            try:
+                TM = autoclass("android.telephony.TelephonyManager")
+                tm = getattr(ctx, 'getSystemService')(getattr(Ctx, 'TELEPHONY_SERVICE'))
+                nt = getattr(tm, 'getDataNetworkType')()
+                if nt in (20,): _band_bps=500.0*125000;  return "5G NR  Max 500Mbps"
+                if nt in (13,): _band_bps=50.0*125000;   return "4G LTE  Max 50Mbps"
+                if nt in (19,): _band_bps=150.0*125000;  return "4G LTE-CA  Max 150Mbps"
+                if nt in (15,): _band_bps=42.0*125000;   return "4G HSPA+  Max 42Mbps"
+                if nt in (8,9,10,3,5,6,12,14):
+                    _band_bps=14.0*125000; return "3G  Max 14Mbps"
+                if nt in (1,2,4,7,11,16):
+                    _band_bps=0.2*125000;  return "2G  Max 0.2Mbps"
+                # nt==0 UNKNOWN - try Layer 2
+            except Exception:
+                pass
+
+            # Layer 2: bandwidth from NetworkCapabilities
+            try:
+                _gDL = getattr(caps, 'getLinkDownstreamBandwidthKbps')
+                dl   = _gDL()
+                if 0 < dl:
+                    if 50000 < dl: _band_bps=500.0*125000;  return "5G ~" + str(dl//1000) + "Mbps"
+                    if 5000  < dl: _band_bps=50.0*125000;   return "4G LTE ~" + str(dl//1000) + "Mbps"
+                    if 1000  < dl: _band_bps=20.0*125000;   return "4G ~" + str(dl//1000) + "Mbps"
+                    if 200   < dl: _band_bps=14.0*125000;   return "3G ~" + str(dl//1000) + "Mbps"
+                    _band_bps=0.2*125000; return "2G ~" + str(dl) + "Kbps"
+            except Exception:
+                pass
+
+            # Layer 3: speed heuristic
+            h = _heuristic(_dl)
+            if h:
+                return h
+
+            _band_bps = 10.0*125000; return "Mobile"
 
         if _hT(3):
-            _band_bps = 1000.0*125000
-            return "Ethernet  Max 1000Mbps"
+            _band_bps = 1000.0*125000; return "Ethernet  Max 1000Mbps"
 
         return "Connected"
     except Exception:
@@ -182,6 +185,7 @@ def _signal_loop():
         _sleep(5)
 
 
+# -- Traffic ----------------------------------------------------------------
 def _bytes():
     try:
         from jnius import autoclass  # type: ignore
@@ -214,20 +218,25 @@ def _fmt(b):
     return "0 KB/s"
 
 
+# -- Public API -------------------------------------------------------------
 def get_network():
+    # Returns keys: dl, ul, sig, ping, arc
     global _started, _dl, _ul
     if not _started:
         _started = True
         _t1 = _Thread(target=_signal_loop, daemon=True)
         getattr(_t1, 'start')()
+        _t2 = _Thread(target=_ping_loop, daemon=True)
+        getattr(_t2, 'start')()
 
     rx, tx = _bytes()
     now    = getattr(_time, 'time')()
     sig    = _signal
+    ping   = _ping_str
 
     if not _bw:
         _bw.update({"rx": rx, "tx": tx, "t": now})
-        return {"dl": "0 KB/s", "ul": "0 KB/s", "sig": sig, "arc": 0.0}
+        return {"dl": "0 KB/s", "ul": "0 KB/s", "sig": sig, "ping": ping, "arc": 0.0}
 
     dt = now - _bw["t"]
     if dt < 0.3:
@@ -235,7 +244,7 @@ def get_network():
             arc = min(100.0, _dl / _band_bps * 100)
         else:
             arc = 0.0
-        return {"dl": _fmt(_dl), "ul": _fmt(_ul), "sig": sig, "arc": arc}
+        return {"dl": _fmt(_dl), "ul": _fmt(_ul), "sig": sig, "ping": ping, "arc": arc}
 
     prx = _bw["rx"]
     ptx = _bw["tx"]
@@ -243,8 +252,12 @@ def get_network():
 
     if prx < rx:
         dl_raw = (rx - prx) / dt
+        _spdhist.append(dl_raw)
+        if not (len(_spdhist) < 11):
+            _spdhist.pop(0)
     else:
         dl_raw = 0.0
+
     if ptx < tx:
         ul_raw = (tx - ptx) / dt
     else:
@@ -253,15 +266,9 @@ def get_network():
     _dl = _EMA * dl_raw + (1 - _EMA) * _dl
     _ul = _EMA * ul_raw + (1 - _EMA) * _ul
 
-    # Feed speed history for heuristic
-    if 0 < dl_raw:
-        _speed_hist.append(dl_raw)
-        if not (len(_speed_hist) < 11):
-            _speed_hist.pop(0)
-
     if 0 < _band_bps:
         arc = min(100.0, _dl / _band_bps * 100)
     else:
         arc = 0.0
 
-    return {"dl": _fmt(_dl), "ul": _fmt(_ul), "sig": sig, "arc": arc}
+    return {"dl": _fmt(_dl), "ul": _fmt(_ul), "sig": sig, "ping": ping, "arc": arc}
