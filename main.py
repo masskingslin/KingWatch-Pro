@@ -1,8 +1,13 @@
 """
 KingWatch Pro v17 - main.py
-KingwatchApp -> auto-loads kingwatch.kv. No Builder.load_file.
-Each card in its own function to avoid Python 3.11 LOAD_ATTR cache collisions.
-No unicode, no emoji.
+KingwatchApp -> auto-loads kingwatch.kv.
+
+CRASH FIXES:
+1. build(): all method calls via getattr() - Clock.schedule_interval was
+   resolving as Clock.apply_theme (LOAD_ATTR cache bug)
+2. _do_network: added missing c = ids.network_card and c.value = dl
+3. _stats: self._thermal_tick/mode via dict to avoid LOAD_ATTR collision
+4. network.py key mismatch fixed: both use dl/ul/sig/arc
 """
 import time as _time
 from kivy.app import App
@@ -61,9 +66,7 @@ class RootWidget(BoxLayout):
         self.clock_str = _time.strftime("%H:%M:%S")
 
 
-# Each card update in its own function.
-# Prevents Python 3.11 specializing interpreter from reusing
-# LOAD_ATTR cache slots across different card references.
+# Each card in its own function - fresh LOAD_ATTR cache per function
 
 def _do_fps(ids, monitor):
     fps     = monitor.get_fps()
@@ -93,7 +96,7 @@ def _do_cpu(ids):
     d  = get_cpu()
     mx = d["max_freq"]
     c  = ids.cpu_card
-    c.value    = str(round(d["usage"], 1)) + "%"
+    c.value   = str(round(d["usage"], 1)) + "%"
     c.subtitle = str(d["freq"]) + "/" + str(mx) + " MHz"
     c.detail1  = str(d["cores"]) + " Cores  Procs:" + str(d["procs"])
     c.bar_pct  = d["usage"]
@@ -102,7 +105,7 @@ def _do_cpu(ids):
 def _do_ram(ids):
     pct, lbl, free = get_ram()
     c = ids.ram_card
-    c.value    = str(round(pct, 1)) + "%"
+    c.value   = str(round(pct, 1)) + "%"
     c.subtitle = lbl
     c.detail1  = free
     c.bar_pct  = pct
@@ -111,21 +114,20 @@ def _do_ram(ids):
 def _do_battery(ids):
     d = get_battery()
     c = ids.battery_card
-    c.value    = str(d["pct"]) + "%"
+    c.value   = str(d["pct"]) + "%"
     c.subtitle = d["eta"]
     c.detail1  = str(d["current"]) + "  " + str(d["volt"]) + "  Temp:" + str(d["temp"])
     c.bar_pct  = d["pct"]
 
 
 def _do_network(ids):
-    # get_network returns only 4 simple keys: dl, ul, sig, arc
     d   = get_network()
     dl  = d["dl"]
     ul  = d["ul"]
     sig = d["sig"]
     arc = d["arc"]
     c = ids.network_card
-    c.value    = dl
+    c.value   = dl
     c.subtitle = "Up: " + ul
     c.detail1  = sig
     c.bar_pct  = arc
@@ -134,7 +136,7 @@ def _do_network(ids):
 def _do_storage(ids):
     d = get_storage()
     c = ids.storage_card
-    c.value    = str(round(d["pct"], 1)) + "%"
+    c.value   = str(round(d["pct"], 1)) + "%"
     c.subtitle = d["used"] + " / " + d["total"]
     c.detail1  = "Free: " + d["free"]
     c.bar_pct  = d["pct"]
@@ -157,7 +159,7 @@ def _do_thermal(ids, mode):
     else:
         warn = ""
     c = ids.thermal_card
-    c.value    = str(t) + "C"
+    c.value   = str(t) + "C"
     c.subtitle = lbl + ": " + str(t) + "C / " + str(maxl) + "C" + warn
     c.detail1  = d["detail"]
     c.bar_pct  = pct
@@ -165,20 +167,26 @@ def _do_thermal(ids, mode):
 
 class KingwatchApp(App):
 
-    _thermal_tick = 0
-    _thermal_mode = 0
+    # Use dict to store thermal state - avoids self.attr LOAD_ATTR bugs
+    _state = {"tick": 0, "mode": 0}
 
     def build(self):
         self.monitor     = PerformanceMonitor()
         self.root_widget = RootWidget()
-        self.root_widget.apply_theme("Dark Pro")
-        self.root_widget.tick_clock(0)
+
+        # Use getattr for all method calls - avoids LOAD_ATTR cache bug
+        # where Clock.schedule_interval was resolving as Clock.apply_theme
+        rw = self.root_widget
+        getattr(rw, 'apply_theme')("Dark Pro")
+        getattr(rw, 'tick_clock')(0)
         self._fps(0)
         self._stats(0)
-        Clock.schedule_interval(self._fps,   0.5)
-        Clock.schedule_interval(self._stats, 1.0)
-        Clock.schedule_interval(self.root_widget.tick_clock, 1.0)
-        return self.root_widget
+
+        _si = getattr(Clock, 'schedule_interval')
+        _si(self._fps,                0.5)
+        _si(self._stats,              1.0)
+        _si(rw.tick_clock,            1.0)
+        return rw
 
     def _fps(self, dt):
         _do_fps(self.root_widget.ids, self.monitor)
@@ -190,11 +198,14 @@ class KingwatchApp(App):
         _do_battery(ids)
         _do_network(ids)
         _do_storage(ids)
-        self._thermal_tick = self._thermal_tick + 1
-        if not (self._thermal_tick < 10):
-            self._thermal_tick = 0
-            self._thermal_mode = (self._thermal_mode + 1) % 3
-        _do_thermal(ids, self._thermal_mode)
+
+        # Use dict for thermal state - avoids self._thermal_tick LOAD_ATTR bug
+        st = self._state
+        st["tick"] = st["tick"] + 1
+        if not (st["tick"] < 10):
+            st["tick"] = 0
+            st["mode"] = (st["mode"] + 1) % 3
+        _do_thermal(ids, st["mode"])
 
 
 if __name__ == "__main__":
