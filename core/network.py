@@ -1,16 +1,15 @@
 """
 KingWatch Pro v17 - core/network.py
-Stabilization Patch - Production Fix
+Shows real SIM receiver band: 5G NR / 4G LTE / 3G / 2G
 
-FIXES APPLIED:
-1. ICMP ping via /system/bin/ping as primary (bypasses VPN routing)
-2. TCP connect() fallback (not connect_ex - avoids EINPROGRESS/115 bug)
-3. Signal heuristic works with 1+ speed samples (not 3+)
-4. Thread race fixed - init flag set AFTER threads started
-5. Safe subprocess decode for Android 13+ (errors='replace')
-6. Socket close in finally block - prevents resource leak crash
-7. _signal always assigned - no 'if s:' gate that caused Detecting...
-8. Ping and signal on separate threads - ping never blocks bandwidth
+BAND DETECTION - 5-layer fallback:
+  L1a: getDataNetworkType()  - accurate, needs READ_PHONE_STATE
+  L1b: getNetworkType()      - deprecated but no permission on most ROMs
+  L2:  getLinkDownstreamBandwidthKbps() - no permission, gives range
+  L3:  speed heuristic       - from measured _dl EMA
+  L4:  'Mobile'              - guaranteed non-empty
+
+All 20 TelephonyManager network type constants mapped.
 """
 import time as _time
 import glob
@@ -28,14 +27,43 @@ _EMA      = 0.4
 _band_bps = 10.0 * 125000
 _spdhist  = []
 
+# All TelephonyManager NETWORK_TYPE_* constants -> (label, max_mbps)
+_NT_MAP = {
+    1:  ("2G GPRS",    0.1),
+    2:  ("2G EDGE",    0.2),
+    3:  ("3G UMTS",    2.0),
+    4:  ("2G CDMA",    0.1),
+    5:  ("3G EVDO",    2.4),
+    6:  ("3G EVDO-A",  3.1),
+    7:  ("2G 1xRTT",   0.1),
+    8:  ("3G HSDPA",   7.2),
+    9:  ("3G HSUPA",   5.8),
+    10: ("3G HSPA",    14.0),
+    11: ("2G GSM",     0.1),
+    12: ("3G EVDO-B",  14.7),
+    13: ("4G LTE",     100.0),
+    14: ("3G EHRPD",   14.0),
+    15: ("4G HSPA+",   42.0),
+    16: ("2G GSM",     0.1),
+    17: ("3G SCDMA",   1.0),
+    18: ("4G LTE-CA",  150.0),
+    19: ("4G LTE-CA",  300.0),
+    20: ("5G NR",      1000.0),
+}
+
+
+def _nt_to_label(nt):
+    """Convert network type int to display label + set _band_bps."""
+    global _band_bps
+    entry = _NT_MAP.get(nt, None)
+    if entry is not None:
+        label, mbps = entry
+        _band_bps = mbps * 125000
+        return label
+    return ""
+
 
 def _ping_icmp():
-    """
-    Primary: /system/bin/ping (ICMP).
-    ICMP bypasses Android VPN routing on most devices.
-    All attrs via getattr - avoids Python 3.11 LOAD_ATTR cache bug.
-    decode(errors='replace') - safe for Android 13+ non-UTF output.
-    """
     _sp   = __import__('subprocess')
     _run  = getattr(_sp, 'run')
     _PIPE = getattr(_sp, 'PIPE')
@@ -55,8 +83,7 @@ def _ping_icmp():
                 txt = getattr(out, 'decode')(errors='replace')
                 m   = _sch(r"time=([\d.]+)\s*ms", txt)
                 if m is not None:
-                    _grp = getattr(m, 'group')
-                    ms   = round(float(_grp(1)))
+                    ms = round(float(getattr(m, 'group')(1)))
                 if 0 < ms:
                     return str(ms) + "ms"
         except Exception:
@@ -65,28 +92,21 @@ def _ping_icmp():
 
 
 def _ping_tcp():
-    """
-    Fallback: TCP connect() - blocks properly unlike connect_ex().
-    connect_ex() returns EINPROGRESS(115) immediately on non-blocking
-    socket, making every attempt look like a failure.
-    Socket closed in finally block to prevent resource leak.
-    """
-    _sk   = __import__('socket')
-    _AF   = getattr(_sk, 'AF_INET')
-    _ST   = getattr(_sk, 'SOCK_STREAM')
-    _SC   = getattr(_sk, 'socket')
-    _now  = getattr(_time, 'time')
+    _sk  = __import__('socket')
+    _AF  = getattr(_sk, 'AF_INET')
+    _ST  = getattr(_sk, 'SOCK_STREAM')
+    _SC  = getattr(_sk, 'socket')
+    _now = getattr(_time, 'time')
     for ip, port in [("8.8.8.8", 53), ("1.1.1.1", 443), ("8.8.4.4", 53)]:
         s = None
         try:
-            s    = _SC(_AF, _ST)
-            _st  = getattr(s, 'settimeout')
-            _cn  = getattr(s, 'connect')
-            _cl  = getattr(s, 'close')
+            s   = _SC(_AF, _ST)
+            _st = getattr(s, 'settimeout')
+            _cn = getattr(s, 'connect')
             _st(1.5)
-            t0   = _now()
+            t0  = _now()
             _cn((ip, port))
-            ms   = round((_now() - t0) * 1000)
+            ms  = round((_now() - t0) * 1000)
             if 0 < ms:
                 return str(ms) + "ms"
         except Exception:
@@ -135,11 +155,10 @@ def _fmt_speed(bps):
 
 
 def _band_from_speed(dl_bps):
-    """Classify band from live speed. Returns label + actual rate."""
     global _band_bps
     spd  = _fmt_speed(dl_bps)
     mbps = dl_bps / 125000.0
-    if 50.0 < mbps:  _band_bps = 500.0*125000; return "5G  " + spd
+    if 50.0 < mbps:  _band_bps = 500.0*125000; return "5G NR  " + spd
     if 10.0 < mbps:  _band_bps = 50.0*125000;  return "4G LTE  " + spd
     if 1.0  < mbps:  _band_bps = 14.0*125000;  return "3G  " + spd
     if 0.05 < mbps:  _band_bps = 2.0*125000;   return "2G  " + spd
@@ -147,16 +166,53 @@ def _band_from_speed(dl_bps):
 
 
 def _heuristic():
-    """Works from 1 sample. Median of recent speed history."""
     global _band_bps
     if len(_spdhist) < 1:
         return ""
     med  = sorted(_spdhist)[len(_spdhist) // 2]
     mbps = med / 125000.0
-    if 50.0 < mbps:  _band_bps = 500.0*125000; return "5G"
+    if 50.0 < mbps:  _band_bps = 500.0*125000; return "5G NR"
     if 10.0 < mbps:  _band_bps = 50.0*125000;  return "4G LTE"
     if 1.0  < mbps:  _band_bps = 14.0*125000;  return "3G"
     if 0.05 < mbps:  _band_bps = 2.0*125000;   return "2G"
+    return ""
+
+
+def _get_cell_band(ctx, Ctx):
+    """
+    Get real SIM receiver band via TelephonyManager.
+    Tries getDataNetworkType() first (API 24+, needs READ_PHONE_STATE on 26+).
+    Falls back to getNetworkType() (deprecated but works without permission
+    on many OEMs including Samsung/Xiaomi/OnePlus).
+    Returns e.g. '4G LTE', '5G NR', '3G HSPA', '2G EDGE'
+    """
+    global _band_bps
+    try:
+        from jnius import autoclass  # type: ignore
+        tm = getattr(ctx, 'getSystemService')(getattr(Ctx, 'TELEPHONY_SERVICE'))
+
+        # L1a: getDataNetworkType - most accurate
+        try:
+            _gDNT = getattr(tm, 'getDataNetworkType')
+            nt    = _gDNT()
+            label = _nt_to_label(nt)
+            if label:
+                return label
+        except Exception:
+            pass
+
+        # L1b: getNetworkType - deprecated but no permission on many ROMs
+        try:
+            _gNT  = getattr(tm, 'getNetworkType')
+            nt    = _gNT()
+            label = _nt_to_label(nt)
+            if label:
+                return label
+        except Exception:
+            pass
+
+    except Exception:
+        pass
     return ""
 
 
@@ -194,29 +250,18 @@ def _detect():
                 _band_bps = 100.0*125000
                 return "WiFi"
 
-        # Cellular - 4 layers
+        # Cellular
         if _hT(0):
-            # L1: TelephonyManager (may need READ_PHONE_STATE on some ROMs)
-            try:
-                TM = autoclass("android.telephony.TelephonyManager")
-                tm = getattr(ctx, 'getSystemService')(getattr(Ctx, 'TELEPHONY_SERVICE'))
-                nt = getattr(tm, 'getDataNetworkType')()
-                if nt in (20,): _band_bps=500.0*125000; return "5G NR  Max 500Mbps"
-                if nt in (13,): _band_bps=50.0*125000;  return "4G LTE  Max 50Mbps"
-                if nt in (19,): _band_bps=150.0*125000; return "4G LTE-CA  Max 150Mbps"
-                if nt in (15,): _band_bps=42.0*125000;  return "4G HSPA+  Max 42Mbps"
-                if nt in (8,9,10,3,5,6,12,14):
-                    _band_bps=14.0*125000; return "3G  Max 14Mbps"
-                if nt in (1,2,4,7,11,16):
-                    _band_bps=0.2*125000;  return "2G  Max 0.2Mbps"
-            except Exception:
-                pass
+            # L1: TelephonyManager (both getDataNetworkType + getNetworkType)
+            band = _get_cell_band(ctx, Ctx)
+            if band:
+                return band
 
             # L2: NetworkCapabilities bandwidth (no permission needed)
             try:
                 dl_k = getattr(caps, 'getLinkDownstreamBandwidthKbps')()
                 if 0 < dl_k:
-                    if 50000 < dl_k: _band_bps=500.0*125000; return "5G ~" + str(dl_k//1000) + "Mbps"
+                    if 50000 < dl_k: _band_bps=500.0*125000; return "5G NR ~" + str(dl_k//1000) + "Mbps"
                     if 5000  < dl_k: _band_bps=50.0*125000;  return "4G LTE ~" + str(dl_k//1000) + "Mbps"
                     if 1000  < dl_k: _band_bps=20.0*125000;  return "4G ~" + str(dl_k//1000) + "Mbps"
                     if 200   < dl_k: _band_bps=14.0*125000;  return "3G ~" + str(dl_k//1000) + "Mbps"
@@ -224,17 +269,17 @@ def _detect():
             except Exception:
                 pass
 
-            # L3: speed history heuristic (1+ samples)
+            # L3: speed history heuristic (works after 1 sample)
             h = _heuristic()
             if h:
                 return h
 
-            # L4: live _dl EMA - always available after first read
+            # L4: live _dl EMA with actual speed
             b = _band_from_speed(_dl)
             if b:
                 return b
 
-            # L5: absolute guaranteed fallback
+            # L5: guaranteed
             _band_bps = 10.0*125000
             return "Mobile"
 
@@ -250,7 +295,6 @@ def _detect():
 
 
 def _safe_fallback():
-    """Always returns non-empty string. Last resort before 'Mobile'."""
     global _band_bps
     for p in glob.glob("/sys/class/net/wlan*/operstate"):
         try:
@@ -275,11 +319,6 @@ def _safe_fallback():
 
 
 def _signal_loop():
-    """
-    Runs on separate thread. Polls every 10s (reduced battery usage).
-    First detection after 1s to populate signal quickly.
-    _signal always assigned - no conditional guard.
-    """
     global _signal
     _sleep = getattr(_time, 'sleep')
     _sleep(1)
@@ -289,7 +328,6 @@ def _signal_loop():
 
 
 def _bytes():
-    """TrafficStats primary (most reliable), /proc/net/dev fallback."""
     try:
         from jnius import autoclass  # type: ignore
         ts = autoclass("android.net.TrafficStats")
@@ -322,11 +360,6 @@ def _fmt(b):
 
 
 def get_network():
-    """
-    Returns: dl, ul, sig, ping, arc
-    Thread race fix: _started flag set only after both threads confirmed
-    started via _init_lock list (avoids Python 3.11 self.attr bug).
-    """
     global _started, _dl, _ul
     if not _started:
         if not _init_lock[0]:
@@ -371,7 +404,6 @@ def get_network():
     else:
         ul_raw = 0.0
 
-    # EMA smoothing - eliminates bandwidth blink
     _dl = _EMA * dl_raw + (1 - _EMA) * _dl
     _ul = _EMA * ul_raw + (1 - _EMA) * _ul
 
