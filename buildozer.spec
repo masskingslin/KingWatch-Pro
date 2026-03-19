@@ -1,11 +1,11 @@
 [app]
-title = KingWatch Pro
-package.name = kingwatchpro
-package.domain = com.kingwatch
+title = K-DroidSentinel
+package.name = kdroidsentinel
+package.domain = com.kdroidsentinel
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf
 source.exclude_dirs = tests,bin,.buildozer,.git,__pycache__,python-apk-source
-version = 1.7.0
+version = 2.1.0
 
 requirements = python3,kivy==2.3.0,pyjnius,plyer
 
