@@ -1,7 +1,8 @@
 """
-KingWatch Pro v17 - core/network.py
-No emoji, no unicode. ASCII only.
-Band detection with in() checks. Thread.start() via getattr.
+KingWatch Pro - core/network.py
+Single global name: _bw_label (consistent everywhere).
+Signal thread starts correctly. Band + receiver max shown.
+No unicode, no emoji, no ascii art.
 """
 import time as _time
 import glob
@@ -10,7 +11,7 @@ from threading import Thread as _Thread
 _signal  = "Detecting..."
 _rssi    = ""
 _band    = 10.0
-_bwlabel = ""
+_bw_label = ""
 _started = False
 _bw      = {}
 _dl      = 0.0
@@ -19,7 +20,6 @@ _EMA     = 0.4
 
 
 def _quality(dbm, wifi=False):
-    """Signal quality as plain text word."""
     if wifi:
         if -50 < dbm: return "Excellent"
         if -60 < dbm: return "Good"
@@ -34,65 +34,63 @@ def _quality(dbm, wifi=False):
 
 
 def _get_mobile_gen(ctx, Ctx):
-    global _band, _bwlabel
+    global _band, _bw_label
     try:
         from jnius import autoclass  # type: ignore
         TM   = autoclass("android.telephony.TelephonyManager")
-        tm   = getattr(ctx,'getSystemService')(getattr(Ctx,'TELEPHONY_SERVICE'))
+        tm   = getattr(ctx, 'getSystemService')(getattr(Ctx, 'TELEPHONY_SERVICE'))
         _gDN = getattr(tm, 'getDataNetworkType')
         nt   = _gDN()
-        if nt in (20,): _band=500.0;  _bwlabel="Max 500Mbps"; return "5G NR"
-        if nt in (13,): _band=50.0;   _bwlabel="Max 50Mbps";  return "4G LTE"
-        if nt in (19,): _band=150.0;  _bwlabel="Max 150Mbps"; return "4G LTE-CA"
-        if nt in (15,): _band=42.0;   _bwlabel="Max 42Mbps";  return "4G HSPA+"
-        if nt in (8,9,10,3,5,6,12,14): _band=14.0; _bwlabel="Max 14Mbps"; return "3G"
-        if nt in (1,2,4,7,11,16):      _band=0.2;  _bwlabel="Max 0.2Mbps"; return "2G"
-        _band=10.0; _bwlabel=""; return "Mobile"
+        if nt in (20,): _band=500.0;  _bw_label="Max 500Mbps"; return "5G NR"
+        if nt in (13,): _band=50.0;   _bw_label="Max 50Mbps";  return "4G LTE"
+        if nt in (19,): _band=150.0;  _bw_label="Max 150Mbps"; return "4G LTE-CA"
+        if nt in (15,): _band=42.0;   _bw_label="Max 42Mbps";  return "4G HSPA+"
+        if nt in (8,9,10,3,5,6,12,14):
+            _band=14.0; _bw_label="Max 14Mbps"; return "3G"
+        if nt in (1,2,4,7,11,16):
+            _band=0.2;  _bw_label="Max 0.2Mbps"; return "2G"
+        _band=10.0; _bw_label=""; return "Mobile"
     except Exception:
         pass
-    _band=10.0; _bwlabel=""; return "Mobile"
+    _band=10.0; _bw_label=""; return "Mobile"
 
 
 def _wifi_info(ctx, Ctx):
-    global _band, _bwlabel
+    global _band, _bw_label
     try:
-        wm   = getattr(ctx,'getSystemService')(getattr(Ctx,'WIFI_SERVICE'))
-        info = getattr(wm,'getConnectionInfo')()
-        rssi = getattr(info,'getRssi')()
-        freq = getattr(info,'getFrequency')()
-        spd  = getattr(info,'getLinkSpeed')()
+        wm   = getattr(ctx, 'getSystemService')(getattr(Ctx, 'WIFI_SERVICE'))
+        info = getattr(wm, 'getConnectionInfo')()
+        rssi = getattr(info, 'getRssi')()
+        freq = getattr(info, 'getFrequency')()
+        spd  = getattr(info, 'getLinkSpeed')()
         if 5000 < freq:
-            _band=300.0; band="5GHz"; _bwlabel="Max 300Mbps"
+            _band=300.0; band="5GHz"; _bw_label="Max 300Mbps"
         else:
-            _band=100.0; band="2.4GHz"; _bwlabel="Max 100Mbps"
-        if rssi < -75:   q = "Weak"
-        elif rssi < -65: q = "Fair"
-        elif rssi < -50: q = "Good"
-        else:            q = "Excellent"
+            _band=100.0; band="2.4GHz"; _bw_label="Max 100Mbps"
         qual     = _quality(rssi, wifi=True)
         rssi_str = str(rssi) + "dBm " + qual
-        label    = "WiFi " + band + " " + q + " " + str(spd) + "Mbps"
+        label    = "WiFi " + band + " " + str(spd) + "Mbps"
         return rssi_str, label
     except Exception:
         pass
-    _band=100.0; _bwlabel="Max 100Mbps"
+    _band=100.0; _bw_label="Max 100Mbps"
     return "", "WiFi"
 
 
 def _fallback():
-    global _band, _bwlabel
+    global _band, _bw_label
     for p in glob.glob("/sys/class/net/wlan*/operstate"):
         try:
             with open(p) as f:
                 if f.read().strip() == "up":
-                    _band=100.0; _bwlabel="Max 100Mbps"; return "WiFi"
+                    _band=100.0; _bw_label="Max 100Mbps"; return "WiFi"
         except Exception:
             pass
     for p in glob.glob("/sys/class/net/rmnet*/operstate"):
         try:
             with open(p) as f:
                 if f.read().strip() == "up":
-                    _band=10.0; _bwlabel=""; return "Mobile"
+                    _band=10.0; _bw_label=""; return "Mobile"
         except Exception:
             pass
     try:
@@ -103,7 +101,7 @@ def _fallback():
                 try:
                     dbm = int(float(p[2].rstrip(".")))
                     if dbm < 0:
-                        _band=100.0; _bwlabel="Max 100Mbps"
+                        _band=100.0; _bw_label="Max 100Mbps"
                         return "WiFi " + str(dbm) + "dBm"
                 except Exception:
                     pass
@@ -119,14 +117,14 @@ def _detect():
         Ctx = autoclass("android.content.Context")
         PA  = autoclass("org.kivy.android.PythonActivity")
         ctx = getattr(PA, 'mActivity')
-        cm  = getattr(ctx,'getSystemService')(getattr(Ctx,'CONNECTIVITY_SERVICE'))
-        net = getattr(cm,'getActiveNetwork')()
+        cm  = getattr(ctx, 'getSystemService')(getattr(Ctx, 'CONNECTIVITY_SERVICE'))
+        net = getattr(cm, 'getActiveNetwork')()
         if net is None:
             _rssi = ""; return _fallback()
-        caps = getattr(cm,'getNetworkCapabilities')(net)
+        caps = getattr(cm, 'getNetworkCapabilities')(net)
         if caps is None:
             _rssi = ""; return _fallback()
-        _hT = getattr(caps,'hasTransport')
+        _hT = getattr(caps, 'hasTransport')
         if _hT(1):
             rssi_str, label = _wifi_info(ctx, Ctx)
             _rssi = rssi_str
@@ -135,8 +133,8 @@ def _detect():
             _rssi = ""
             return _get_mobile_gen(ctx, Ctx)
         if _hT(3):
-            global _band, _bwlabel
-            _band=1000.0; _bwlabel="Max 1000Mbps"; _rssi=""; return "Ethernet"
+            global _band, _bw_label
+            _band=1000.0; _bw_label="Max 1000Mbps"; _rssi=""; return "Ethernet"
         _rssi = ""; return "Connected"
     except Exception:
         pass
@@ -157,8 +155,8 @@ def _bytes():
     try:
         from jnius import autoclass  # type: ignore
         ts = autoclass("android.net.TrafficStats")
-        rx = getattr(ts,'getTotalRxBytes')()
-        tx = getattr(ts,'getTotalTxBytes')()
+        rx = getattr(ts, 'getTotalRxBytes')()
+        tx = getattr(ts, 'getTotalTxBytes')()
         if not (rx < 0):
             if not (tx < 0):
                 return int(rx), int(tx)
@@ -185,7 +183,7 @@ def _fmt(b):
     return "0 KB/s"
 
 
-def get_network() -> dict:
+def get_network():
     global _started, _dl, _ul
     if not _started:
         _started = True
@@ -195,15 +193,15 @@ def get_network() -> dict:
     rx, tx = _bytes()
     now    = getattr(_time, 'time')()
 
-    # Use direct subscript access - safer than .get() in Py3.11
-    sig    = _signal
-    rssi   = _rssi
-    bwmax  = _bwlabel
+    # Read globals directly - safest access pattern
+    sig   = _signal
+    rssi  = _rssi
+    bwlbl = _bw_label
 
     if not _bw:
         _bw.update({"rx": rx, "tx": tx, "t": now})
-        return {"dl":"0 KB/s","ul":"0 KB/s",
-                "signal":sig,"rssi":rssi,"bwmax":bwmax,"arc_pct":0.0}
+        return {"dl":"0 KB/s", "ul":"0 KB/s",
+                "signal":sig, "rssi":rssi, "bw_label":bwlbl, "arc_pct":0.0}
 
     dt = now - _bw["t"]
     if dt < 0.3:
@@ -211,12 +209,12 @@ def get_network() -> dict:
             arc = min(100.0, _dl / (_band * 125000))
         else:
             arc = 0.0
-        return {"dl":_fmt(_dl),"ul":_fmt(_ul),
-                "signal":sig,"rssi":rssi,"bwmax":bwmax,"arc_pct":arc}
+        return {"dl":_fmt(_dl), "ul":_fmt(_ul),
+                "signal":sig, "rssi":rssi, "bw_label":bwlbl, "arc_pct":arc}
 
     prx = _bw["rx"]
     ptx = _bw["tx"]
-    _bw.update({"rx":rx,"tx":tx,"t":now})
+    _bw.update({"rx":rx, "tx":tx, "t":now})
 
     if prx < rx:
         dl_raw = (rx - prx) / dt
@@ -235,5 +233,5 @@ def get_network() -> dict:
     else:
         arc = 0.0
 
-    return {"dl":_fmt(_dl),"ul":_fmt(_ul),
-            "signal":sig,"rssi":rssi,"bwmax":bwmax,"arc_pct":arc}
+    return {"dl":_fmt(_dl), "ul":_fmt(_ul),
+            "signal":sig, "rssi":rssi, "bw_label":bwlbl, "arc_pct":arc}
