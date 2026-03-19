@@ -1,10 +1,11 @@
 """
-KingWatch Pro v17 - themes.py
-8 modern themes. All text colours are bright/white for readability.
-No unicode, no emoji.
+K-DroidSentinel v2.1.0 - themes.py
+8 themes. Default is K-DroidSentinel matching the JSX design.
+All TEXT = #FFFFFF. No unicode.
 """
 
 THEME_NAMES = [
+    "K-DroidSentinel",
     "Dark Pro",
     "Amoled",
     "Cyber Neon",
@@ -12,11 +13,20 @@ THEME_NAMES = [
     "Sunset Lava",
     "Forest Night",
     "Arctic Ice",
-    "Royal Purple",
 ]
 
 _THEMES = {
-    # 1. Dark Pro - classic dark, bright green accent
+    # 1. K-DroidSentinel - gold/cyan military dark (matches JSX)
+    "K-DroidSentinel": {
+        "BG":     "#060A12",
+        "CARD":   "#0C1220",
+        "TEXT":   "#C8D8F0",
+        "DIM":    "#4A6080",
+        "ACCENT": "#F0C040",
+        "WARN":   "#FFA502",
+        "DANGER": "#FF4757",
+    },
+    # 2. Dark Pro
     "Dark Pro": {
         "BG":     "#0A0A0A",
         "CARD":   "#1A1A1A",
@@ -26,7 +36,7 @@ _THEMES = {
         "WARN":   "#FF9100",
         "DANGER": "#FF1744",
     },
-    # 2. Amoled - true black, white text, cyan accent
+    # 3. Amoled
     "Amoled": {
         "BG":     "#000000",
         "CARD":   "#111111",
@@ -36,7 +46,7 @@ _THEMES = {
         "WARN":   "#FFD740",
         "DANGER": "#FF1744",
     },
-    # 3. Cyber Neon - dark purple, white text, magenta accent
+    # 4. Cyber Neon
     "Cyber Neon": {
         "BG":     "#110022",
         "CARD":   "#1E0038",
@@ -46,7 +56,7 @@ _THEMES = {
         "WARN":   "#FFFF00",
         "DANGER": "#FF3040",
     },
-    # 4. Ocean Deep - dark navy, white text, aqua accent
+    # 5. Ocean Deep
     "Ocean Deep": {
         "BG":     "#03111F",
         "CARD":   "#071E30",
@@ -56,7 +66,7 @@ _THEMES = {
         "WARN":   "#FF9800",
         "DANGER": "#FF3D00",
     },
-    # 5. Sunset Lava - dark warm, white text, orange accent
+    # 6. Sunset Lava
     "Sunset Lava": {
         "BG":     "#150800",
         "CARD":   "#221200",
@@ -66,7 +76,7 @@ _THEMES = {
         "WARN":   "#FFD600",
         "DANGER": "#DD2C00",
     },
-    # 6. Forest Night - dark green, white text, lime accent
+    # 7. Forest Night
     "Forest Night": {
         "BG":     "#041204",
         "CARD":   "#0A1E0A",
@@ -76,7 +86,7 @@ _THEMES = {
         "WARN":   "#FFD600",
         "DANGER": "#FF3D00",
     },
-    # 7. Arctic Ice - dark slate, white text, sky blue accent
+    # 8. Arctic Ice
     "Arctic Ice": {
         "BG":     "#06101A",
         "CARD":   "#0D1E2E",
@@ -86,18 +96,8 @@ _THEMES = {
         "WARN":   "#FFD740",
         "DANGER": "#FF5252",
     },
-    # 8. Royal Purple - dark indigo, white text, violet accent
-    "Royal Purple": {
-        "BG":     "#0C0018",
-        "CARD":   "#180030",
-        "TEXT":   "#FFFFFF",
-        "DIM":    "#9966BB",
-        "ACCENT": "#EA80FC",
-        "WARN":   "#FFD54F",
-        "DANGER": "#FF5252",
-    },
 }
 
 
 def get_theme(name):
-    return _THEMES.get(name, _THEMES["Dark Pro"])
+    return _THEMES.get(name, _THEMES["K-DroidSentinel"])
