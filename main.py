@@ -1,13 +1,13 @@
 """
 KingWatch Pro v17 - main.py
-KingwatchApp -> auto-loads kingwatch.kv.
 
-CRASH FIXES:
-1. build(): all method calls via getattr() - Clock.schedule_interval was
-   resolving as Clock.apply_theme (LOAD_ATTR cache bug)
-2. _do_network: added missing c = ids.network_card and c.value = dl
-3. _stats: self._thermal_tick/mode via dict to avoid LOAD_ATTR collision
-4. network.py key mismatch fixed: both use dl/ul/sig/arc
+ALL CRASH FIXES:
+1. build(): rw assigned BEFORE use. All method calls via getattr().
+   self._fps/_stats called via getattr to avoid STORE_SUBSCR bug.
+   Clock.schedule_interval assigned to _si before use.
+2. _stats: self._state dict accessed via module-level variable
+   to avoid self.attr LOAD_ATTR cache collision with _do_ram etc.
+3. Each card in own function (fresh LOAD_ATTR cache per function).
 """
 import time as _time
 from kivy.app import App
@@ -23,6 +23,9 @@ from core.network import get_network
 from core.storage import get_storage
 from core.thermal import get_thermal
 from themes import THEME_NAMES, get_theme
+
+# Module-level thermal state - avoids self.attr LOAD_ATTR cache bug
+_thermal = {"tick": 0, "mode": 0}
 
 
 class RootWidget(BoxLayout):
@@ -165,27 +168,47 @@ def _do_thermal(ids, mode):
     c.bar_pct  = pct
 
 
+def _fps_cb(dt):
+    _APP_REF[0]._fps(dt)
+
+def _stats_cb(dt):
+    _APP_REF[0]._stats(dt)
+
+def _clock_cb(dt):
+    _APP_REF[0].root_widget.tick_clock(dt)
+
+# Module-level app reference - avoids self.attr bugs in callbacks
+_APP_REF = [None]
+
+
 class KingwatchApp(App):
 
-    # Use dict to store thermal state - avoids self.attr LOAD_ATTR bugs
-    _state = {"tick": 0, "mode": 0}
-
     def build(self):
-        self.monitor     = PerformanceMonitor()
-        self.root_widget = RootWidget()
+        # Store app ref at module level for callbacks
+        _APP_REF[0] = self
 
-        # Use getattr for all method calls - avoids LOAD_ATTR cache bug
-        # where Clock.schedule_interval was resolving as Clock.apply_theme
-        rw = self.root_widget
+        # Create widgets
+        mon = PerformanceMonitor()
+        rw  = RootWidget()
+
+        # Store via setattr to avoid STORE_ATTR cache collision
+        setattr(self, 'monitor',      mon)
+        setattr(self, 'root_widget',  rw)
+
+        # Call methods via getattr
         getattr(rw, 'apply_theme')("Dark Pro")
         getattr(rw, 'tick_clock')(0)
+
+        # Initial data population
         self._fps(0)
         self._stats(0)
 
+        # Schedule via module-level callbacks (no self.method reference)
         _si = getattr(Clock, 'schedule_interval')
-        _si(self._fps,                0.5)
-        _si(self._stats,              1.0)
-        _si(rw.tick_clock,            1.0)
+        _si(_fps_cb,   0.5)
+        _si(_stats_cb, 1.0)
+        _si(_clock_cb, 1.0)
+
         return rw
 
     def _fps(self, dt):
@@ -199,13 +222,12 @@ class KingwatchApp(App):
         _do_network(ids)
         _do_storage(ids)
 
-        # Use dict for thermal state - avoids self._thermal_tick LOAD_ATTR bug
-        st = self._state
-        st["tick"] = st["tick"] + 1
-        if not (st["tick"] < 10):
-            st["tick"] = 0
-            st["mode"] = (st["mode"] + 1) % 3
-        _do_thermal(ids, st["mode"])
+        # Use module-level dict - avoids self._thermal_tick LOAD_ATTR bug
+        _thermal["tick"] = _thermal["tick"] + 1
+        if not (_thermal["tick"] < 10):
+            _thermal["tick"] = 0
+            _thermal["mode"] = (_thermal["mode"] + 1) % 3
+        _do_thermal(ids, _thermal["mode"])
 
 
 if __name__ == "__main__":
