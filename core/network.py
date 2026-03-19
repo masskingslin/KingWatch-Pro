@@ -1,7 +1,23 @@
 """
 KingWatch Pro v17 - core/network.py
-Hybrid band detection + ping via background thread.
-Returns keys: dl, ul, sig, ping, arc
+
+ROOT CAUSE OF SIGNAL STUCK AT 'Detecting...':
+  Chain of failures confirmed by bytecode + screenshot analysis:
+  1. getDataNetworkType() -> SecurityException on OEM ROM (MIUI/OXY etc)
+  2. getLinkDownstreamBandwidthKbps() -> returns 0 on locked ROMs
+  3. _heuristic() -> needs 3+ speed samples, returns '' on first calls
+  4. _fallback() -> sysfs operstate not accessible -> returns ''
+  5. _signal_loop: `if s:` where s='' -> _signal never updated
+  Result: _signal stays 'Detecting...' forever
+
+FIX: _detect() NEVER returns ''.
+  Layer 4 (new): Classify from _dl (already measured by TrafficStats).
+  Layer 5 (new): Always return 'Mobile' as final guaranteed fallback.
+  The _dl EMA value is available immediately - no permissions needed.
+
+PING STATUS: Bytecode correct. POP_JUMP_IF_TRUE on res is right:
+  res=0 (connected)  -> falsy -> falls through -> returns ms  OK
+  res!=0 (blocked)   -> truthy -> jumps to next host         OK
 """
 import time as _time
 import glob
@@ -15,12 +31,11 @@ _dl       = 0.0
 _ul       = 0.0
 _EMA      = 0.4
 _band_bps = 10.0 * 125000
-_spdhist  = []   # speed history for heuristic
+_spdhist  = []
 
 
 # -- Ping ------------------------------------------------------------------
 def _ping_once():
-    """TCP connect ping - all via getattr to avoid Python 3.11 cache bug."""
     _sk          = __import__('socket')
     _AF_INET     = getattr(_sk, 'AF_INET')
     _SOCK_STREAM = getattr(_sk, 'SOCK_STREAM')
@@ -37,7 +52,8 @@ def _ping_once():
             res = _cx((ip, port))
             ms  = round((_now() - t0) * 1000)
             _cl()
-            if not res:   # res == 0 means connected
+            # res=0 means connected -> falsy -> return ms
+            if not res:
                 return str(ms) + "ms"
         except Exception:
             pass
@@ -53,7 +69,7 @@ def _ping_loop():
         _sleep(8)
 
 
-# -- Band detection ---------------------------------------------------------
+# -- Band helpers ----------------------------------------------------------
 def _quality(dbm):
     if -50 < dbm: return "Excellent"
     if -60 < dbm: return "Good"
@@ -62,20 +78,37 @@ def _quality(dbm):
     return "Poor"
 
 
-def _heuristic(dl_bps):
-    """Layer 3: classify band from measured speed median."""
+def _band_from_speed(bps):
+    """
+    Layer 4: classify band from current measured speed.
+    Uses _dl EMA - available after first TrafficStats read.
+    No permissions needed. Always works.
+    """
+    global _band_bps
+    mbps = bps / 125000.0
+    if 50.0 < mbps:  _band_bps = 500.0*125000;  return "5G"
+    if 10.0 < mbps:  _band_bps = 50.0*125000;   return "4G LTE"
+    if 1.0  < mbps:  _band_bps = 14.0*125000;   return "3G"
+    if 0.05 < mbps:  _band_bps = 2.0*125000;    return "2G"
+    # Speed too low to classify - keep existing _band_bps
+    return ""
+
+
+def _heuristic():
+    """Layer 3: median of recent speed history."""
     global _band_bps
     if len(_spdhist) < 3:
         return ""
     med  = sorted(_spdhist)[len(_spdhist) // 2]
     mbps = med / 125000.0
-    if 50.0 < mbps:  _band_bps = 500.0*125000; return "5G (speed)"
-    if 10.0 < mbps:  _band_bps = 50.0*125000;  return "4G LTE (speed)"
-    if 1.0  < mbps:  _band_bps = 14.0*125000;  return "3G (speed)"
-    if 0.05 < mbps:  _band_bps = 2.0*125000;   return "2G (speed)"
+    if 50.0 < mbps:  _band_bps = 500.0*125000;  return "5G"
+    if 10.0 < mbps:  _band_bps = 50.0*125000;   return "4G LTE"
+    if 1.0  < mbps:  _band_bps = 14.0*125000;   return "3G"
+    if 0.05 < mbps:  _band_bps = 2.0*125000;    return "2G"
     return ""
 
 
+# -- Signal detection ------------------------------------------------------
 def _detect():
     global _band_bps
     try:
@@ -86,10 +119,10 @@ def _detect():
         cm  = getattr(ctx, 'getSystemService')(getattr(Ctx, 'CONNECTIVITY_SERVICE'))
         net = getattr(cm, 'getActiveNetwork')()
         if net is None:
-            return _fallback()
+            return _safe_fallback()
         caps = getattr(cm, 'getNetworkCapabilities')(net)
         if caps is None:
-            return _fallback()
+            return _safe_fallback()
         _hT = getattr(caps, 'hasTransport')
 
         # WiFi
@@ -107,72 +140,98 @@ def _detect():
                 q = _quality(rssi)
                 return "WiFi " + band + " " + q + " " + str(rssi) + "dBm " + str(spd) + "Mbps"
             except Exception:
-                _band_bps = 100.0*125000; return "WiFi"
+                _band_bps = 100.0*125000
+                return "WiFi"
 
-        # Cellular - Layer 1: TelephonyManager
+        # Cellular
         if _hT(0):
+            # Layer 1: TelephonyManager (may fail on locked ROMs)
             try:
                 TM = autoclass("android.telephony.TelephonyManager")
                 tm = getattr(ctx, 'getSystemService')(getattr(Ctx, 'TELEPHONY_SERVICE'))
                 nt = getattr(tm, 'getDataNetworkType')()
-                if nt in (20,): _band_bps=500.0*125000;  return "5G NR  Max 500Mbps"
-                if nt in (13,): _band_bps=50.0*125000;   return "4G LTE  Max 50Mbps"
-                if nt in (19,): _band_bps=150.0*125000;  return "4G LTE-CA  Max 150Mbps"
-                if nt in (15,): _band_bps=42.0*125000;   return "4G HSPA+  Max 42Mbps"
+                if nt in (20,): _band_bps=500.0*125000; return "5G NR  Max 500Mbps"
+                if nt in (13,): _band_bps=50.0*125000;  return "4G LTE  Max 50Mbps"
+                if nt in (19,): _band_bps=150.0*125000; return "4G LTE-CA  Max 150Mbps"
+                if nt in (15,): _band_bps=42.0*125000;  return "4G HSPA+  Max 42Mbps"
                 if nt in (8,9,10,3,5,6,12,14):
                     _band_bps=14.0*125000; return "3G  Max 14Mbps"
                 if nt in (1,2,4,7,11,16):
                     _band_bps=0.2*125000;  return "2G  Max 0.2Mbps"
-                # nt==0 UNKNOWN - try Layer 2
             except Exception:
-                pass
+                pass  # locked ROM - try next layer
 
-            # Layer 2: bandwidth from NetworkCapabilities
+            # Layer 2: NetworkCapabilities bandwidth (no permission)
             try:
-                _gDL = getattr(caps, 'getLinkDownstreamBandwidthKbps')
-                dl   = _gDL()
-                if 0 < dl:
-                    if 50000 < dl: _band_bps=500.0*125000;  return "5G ~" + str(dl//1000) + "Mbps"
-                    if 5000  < dl: _band_bps=50.0*125000;   return "4G LTE ~" + str(dl//1000) + "Mbps"
-                    if 1000  < dl: _band_bps=20.0*125000;   return "4G ~" + str(dl//1000) + "Mbps"
-                    if 200   < dl: _band_bps=14.0*125000;   return "3G ~" + str(dl//1000) + "Mbps"
-                    _band_bps=0.2*125000; return "2G ~" + str(dl) + "Kbps"
+                dl_kbps = getattr(caps, 'getLinkDownstreamBandwidthKbps')()
+                if 0 < dl_kbps:
+                    if 50000 < dl_kbps:
+                        _band_bps=500.0*125000;  return "5G ~" + str(dl_kbps//1000) + "Mbps"
+                    if 5000  < dl_kbps:
+                        _band_bps=50.0*125000;   return "4G LTE ~" + str(dl_kbps//1000) + "Mbps"
+                    if 1000  < dl_kbps:
+                        _band_bps=20.0*125000;   return "4G ~" + str(dl_kbps//1000) + "Mbps"
+                    if 200   < dl_kbps:
+                        _band_bps=14.0*125000;   return "3G ~" + str(dl_kbps//1000) + "Mbps"
+                    _band_bps=0.2*125000; return "2G ~" + str(dl_kbps) + "Kbps"
             except Exception:
                 pass
 
-            # Layer 3: speed heuristic
-            h = _heuristic(_dl)
+            # Layer 3: speed history heuristic
+            h = _heuristic()
             if h:
-                return h
+                return h + "  (speed)"
 
-            _band_bps = 10.0*125000; return "Mobile"
+            # Layer 4: current _dl EMA - always available
+            b = _band_from_speed(_dl)
+            if b:
+                return b + "  (live)"
+
+            # Layer 5: guaranteed non-empty fallback
+            _band_bps = 10.0*125000
+            return "Mobile"
 
         if _hT(3):
-            _band_bps = 1000.0*125000; return "Ethernet  Max 1000Mbps"
+            _band_bps = 1000.0*125000
+            return "Ethernet"
 
         return "Connected"
+
     except Exception:
         pass
-    return _fallback()
+    return _safe_fallback()
 
 
-def _fallback():
+def _safe_fallback():
+    """
+    Always returns a non-empty string.
+    Checks sysfs first, then returns 'Mobile' guaranteed.
+    """
     global _band_bps
     for p in glob.glob("/sys/class/net/wlan*/operstate"):
         try:
             with open(p) as f:
                 if f.read().strip() == "up":
-                    _band_bps = 100.0*125000; return "WiFi"
+                    _band_bps = 100.0*125000
+                    return "WiFi"
         except Exception:
             pass
     for p in glob.glob("/sys/class/net/rmnet*/operstate"):
         try:
             with open(p) as f:
                 if f.read().strip() == "up":
-                    _band_bps = 10.0*125000; return "Mobile"
+                    _band_bps = 10.0*125000
+                    return "Mobile"
         except Exception:
             pass
-    return ""
+
+    # Layer 4: classify from current speed
+    b = _band_from_speed(_dl)
+    if b:
+        return b
+
+    # Layer 5: absolute guaranteed minimum
+    return "Mobile"
 
 
 def _signal_loop():
@@ -180,8 +239,8 @@ def _signal_loop():
     _sleep = getattr(_time, 'sleep')
     while True:
         s = _detect()
-        if s:
-            _signal = s
+        # s is ALWAYS non-empty now - no more stuck at Detecting...
+        _signal = s
         _sleep(5)
 
 
@@ -220,7 +279,6 @@ def _fmt(b):
 
 # -- Public API -------------------------------------------------------------
 def get_network():
-    # Returns keys: dl, ul, sig, ping, arc
     global _started, _dl, _ul
     if not _started:
         _started = True
@@ -236,7 +294,7 @@ def get_network():
 
     if not _bw:
         _bw.update({"rx": rx, "tx": tx, "t": now})
-        return {"dl": "0 KB/s", "ul": "0 KB/s", "sig": sig, "ping": ping, "arc": 0.0}
+        return {"dl":"0 KB/s","ul":"0 KB/s","sig":sig,"ping":ping,"arc":0.0}
 
     dt = now - _bw["t"]
     if dt < 0.3:
@@ -244,7 +302,7 @@ def get_network():
             arc = min(100.0, _dl / _band_bps * 100)
         else:
             arc = 0.0
-        return {"dl": _fmt(_dl), "ul": _fmt(_ul), "sig": sig, "ping": ping, "arc": arc}
+        return {"dl":_fmt(_dl),"ul":_fmt(_ul),"sig":sig,"ping":ping,"arc":arc}
 
     prx = _bw["rx"]
     ptx = _bw["tx"]
@@ -271,4 +329,4 @@ def get_network():
     else:
         arc = 0.0
 
-    return {"dl": _fmt(_dl), "ul": _fmt(_ul), "sig": sig, "ping": ping, "arc": arc}
+    return {"dl":_fmt(_dl),"ul":_fmt(_ul),"sig":sig,"ping":ping,"arc":arc}
