@@ -27,6 +27,24 @@ from core.storage import get_storage
 from core.thermal import get_thermal
 from themes import THEME_NAMES, get_theme
 
+# Runtime permission request for all sensitive permissions
+# BUILD_SPEC has them declared; this prompts user to GRANT them
+# READ_PHONE_STATE    -> getDataNetworkType() exact 5G/4G band
+# ACCESS_NETWORK_STATE-> getActiveNetwork(), NetworkCapabilities
+# ACCESS_WIFI_STATE   -> WifiManager rssi/freq/speed
+# POST_NOTIFICATIONS  -> battery/network alerts (API 33+)
+try:
+    from android.permissions import request_permissions as _rp  # type: ignore
+    from android.permissions import Permission as _P             # type: ignore
+    _rp([
+        _P.READ_PHONE_STATE,
+        _P.ACCESS_NETWORK_STATE,
+        _P.ACCESS_WIFI_STATE,
+        _P.POST_NOTIFICATIONS,
+    ])
+except Exception:
+    pass
+
 # Module-level thermal state avoids self.attr LOAD_ATTR bugs
 _th = {"tick": 0, "mode": 0}
 
